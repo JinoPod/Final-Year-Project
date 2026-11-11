@@ -72,7 +72,9 @@ def load_data():
 def load_models():
     """Load trained models."""
     models = {}
-    model_files = ["random_forest", "xgboost", "lightgbm", "ensemble", "logistic_regression"]
+    # XGBoost is the primary model (report Section 3.4) so it is listed first;
+    # the rest are comparison baselines. Missing files are skipped.
+    model_files = ["xgboost", "random_forest", "lightgbm", "logistic_regression", "ensemble"]
     
     for model_file in model_files:
         try:

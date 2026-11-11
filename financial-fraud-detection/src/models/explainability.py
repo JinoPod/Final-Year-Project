@@ -598,7 +598,7 @@ if __name__ == "__main__":
     import sys
     sys.path.append('..')
     from data.preprocess import preprocess_data
-    from models.train_model import train_and_evaluate_all_models, load_model
+    from models.train_model import load_model
     
     # Load preprocessed data
     processed_dir = "../../data/processed"

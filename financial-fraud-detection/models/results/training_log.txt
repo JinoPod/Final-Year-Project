@@ -1,0 +1,61 @@
+﻿Train (226980, 30) fraud=378 | Test (56746, 30) fraud=95
+
+Tuning XGBoost: 40 trials x 3-fold CV (SMOTE inside each fold)
+  trial   1/40: CV F1=0.8148 (best 0.8148)
+  trial   2/40: CV F1=0.8579 (best 0.8579)
+  trial   3/40: CV F1=0.8580 (best 0.8580)
+  trial   4/40: CV F1=0.8507 (best 0.8580)
+  trial   5/40: CV F1=0.8567 (best 0.8580)
+  trial   6/40: CV F1=0.8563 (best 0.8580)
+  trial   7/40: CV F1=0.8151 (best 0.8580)
+  trial   8/40: CV F1=0.8221 (best 0.8580)
+  trial   9/40: CV F1=0.8689 (best 0.8689)
+  trial  10/40: CV F1=0.8526 (best 0.8689)
+  trial  11/40: CV F1=0.8615 (best 0.8689)
+  trial  12/40: CV F1=0.8641 (best 0.8689)
+  trial  13/40: CV F1=0.8612 (best 0.8689)
+  trial  14/40: CV F1=0.8514 (best 0.8689)
+  trial  15/40: CV F1=0.8563 (best 0.8689)
+  trial  16/40: CV F1=0.8665 (best 0.8689)
+  trial  17/40: CV F1=0.8625 (best 0.8689)
+  trial  18/40: CV F1=0.8655 (best 0.8689)
+  trial  19/40: CV F1=0.8656 (best 0.8689)
+  trial  20/40: CV F1=0.8580 (best 0.8689)
+  trial  21/40: CV F1=0.8654 (best 0.8689)
+  trial  22/40: CV F1=0.8663 (best 0.8689)
+  trial  23/40: CV F1=0.8642 (best 0.8689)
+  trial  24/40: CV F1=0.8620 (best 0.8689)
+  trial  25/40: CV F1=0.8547 (best 0.8689)
+  trial  26/40: CV F1=0.8625 (best 0.8689)
+  trial  27/40: CV F1=0.8670 (best 0.8689)
+  trial  28/40: CV F1=0.8661 (best 0.8689)
+  trial  29/40: CV F1=0.8632 (best 0.8689)
+  trial  30/40: CV F1=0.8692 (best 0.8692)
+  trial  31/40: CV F1=0.8613 (best 0.8692)
+  trial  32/40: CV F1=0.8608 (best 0.8692)
+  trial  33/40: CV F1=0.8645 (best 0.8692)
+  trial  34/40: CV F1=0.8608 (best 0.8692)
+  trial  35/40: CV F1=0.8704 (best 0.8704)
+  trial  36/40: CV F1=0.8657 (best 0.8704)
+  trial  37/40: CV F1=0.8636 (best 0.8704)
+  trial  38/40: CV F1=0.8628 (best 0.8704)
+  trial  39/40: CV F1=0.8575 (best 0.8704)
+  trial  40/40: CV F1=0.8527 (best 0.8704)
+Best CV F1=0.8704, threshold=0.8141, SMOTE ratio=0.1, params={'n_estimators': 250, 'max_depth': 8, 'learning_rate': 0.12877927645027618, 'subsample': 0.8519323143030941, 'colsample_bytree': 0.5816027170190063, 'min_child_weight': 1, 'gamma': 0.7224882283050598}
+
+Baseline Logistic Regression: 3-fold CV for threshold, then refit
+
+Baseline Random Forest: 3-fold CV for threshold, then refit
+
+Baseline LightGBM: 3-fold CV for threshold, then refit
+Saved C:\Users\user\Desktop\FYP\financial-fraud-detection\models\models\xgboost.pkl
+Saved C:\Users\user\Desktop\FYP\financial-fraud-detection\models\models\logistic_regression.pkl
+Saved C:\Users\user\Desktop\FYP\financial-fraud-detection\models\models\random_forest.pkl
+Saved C:\Users\user\Desktop\FYP\financial-fraud-detection\models\models\lightgbm.pkl
+
+Test-set results:
+              model  threshold  precision  recall  f1_score  auc_roc  avg_precision  cv_f1  tp  fp  fn
+            XGBoost     0.8141     0.9600  0.7579    0.8471   0.9776         0.8033 0.8704  72   3  23
+Logistic Regression     0.9790     0.8256  0.7474    0.7845   0.9670         0.6912 0.7879  71  15  24
+      Random Forest     0.5300     0.9474  0.7579    0.8421   0.9606         0.8258 0.8667  72   4  23
+           LightGBM     0.7169     0.8889  0.7579    0.8182   0.9720         0.8020 0.8651  72   9  23
