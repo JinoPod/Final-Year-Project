@@ -1,0 +1,34 @@
+# Dashboard theme: navy, gold and creme. Finishing CSS and chart colours are in dashboard/theme.py.
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#1F3A5F"
+backgroundColor = "#FBF8F1"
+secondaryBackgroundColor = "#F2EBDD"
+textColor = "#1E2A3A"
+linkColor = "#2E64A0"
+borderColor = "#E4D9C3"
+showWidgetBorder = true
+baseRadius = "medium"
+font = "sans-serif"
+headingFont = "serif"
+dataframeHeaderBackgroundColor = "#EFE6D3"
+redColor = "#B23A30"
+blueColor = "#2E64A0"
+greenColor = "#3E7D5A"
+yellowColor = "#A97A12"
+orangeColor = "#C7792E"
+chartCategoricalColors = ["#2E64A0", "#BF4B3C", "#B8892B"]
+
+[theme.sidebar]
+backgroundColor = "#1F3A5F"
+secondaryBackgroundColor = "#2A4A73"
+textColor = "#F5EFE3"
+primaryColor = "#D9B45A"
+borderColor = "#3A5A84"
