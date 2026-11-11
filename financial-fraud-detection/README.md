@@ -59,9 +59,11 @@ Then open http://localhost:8501. Pages:
 - **Home**: project overview
 - **Upload & Score**: upload a CSV, get fraud scores and a SHAP explanation per row; each upload is written to the audit log
 - **Audit Log**: browse past batches and decisions; stored input hashes are re-checked to detect tampering
-- **Model Performance**: metrics, confusion matrices, ROC/PR curves for all models
-- **Transaction Explanation**: SHAP explanation for any test transaction
-- **Live Monitoring**: simulated transaction stream
+- **Model Performance**: XGBoost test-set metrics, confusion matrix, ROC/PR curves and global SHAP charts
+- **Transaction Explanation**: SHAP (and LIME) explanation for any test transaction
+
+The dashboard shows only the primary XGBoost model. The baseline comparison is in
+`models/results/` and `documentation/results_for_report.md`.
 
 Try the upload page with `data/sample/sample_transactions.csv` (1,000 test transactions, 30 fraud).
 The audit log is stored in `logs/audit.db` (SQLite, append-only).
