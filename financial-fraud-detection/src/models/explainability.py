@@ -13,7 +13,6 @@ import lime.lime_tabular
 from sklearn.pipeline import Pipeline
 import os
 import joblib
-from IPython.display import display, HTML
 
 def explain_with_shap(model, X, feature_names=None, sample_idx=None, output_dir=None):
     """

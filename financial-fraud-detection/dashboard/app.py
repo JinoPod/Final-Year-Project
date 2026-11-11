@@ -680,7 +680,10 @@ def main():
                         
                         # Plot SHAP values
                         fig, ax = plt.subplots(figsize=(8, 4))
-                        shap.plots.waterfall(shap_values[0], show=False)
+                        # Tree models like Random Forest return one explanation per class
+                        # (shape: samples x features x classes); plot the fraud class.
+                        sv = shap_values[0, :, 1] if len(shap_values.shape) == 3 else shap_values[0]
+                        shap.plots.waterfall(sv, show=False)
                         st.pyplot(fig)
         
         # Display monitoring metrics
