@@ -1,0 +1,175 @@
+﻿Loading data from C:\Users\user\Desktop\FYP\financial-fraud-detection\data\raw\creditcard.csv...
+Removed 1081 duplicate rows and 0 rows with missing values
+
+=== Split 1/5 (seed 101) ===
+  trial   1/20: CV F1=0.8653 (best 0.8653)
+  trial   2/20: CV F1=0.8275 (best 0.8653)
+  trial   3/20: CV F1=0.8667 (best 0.8667)
+  trial   4/20: CV F1=0.8523 (best 0.8667)
+  trial   5/20: CV F1=0.8633 (best 0.8667)
+  trial   6/20: CV F1=0.8600 (best 0.8667)
+  trial   7/20: CV F1=0.8603 (best 0.8667)
+  trial   8/20: CV F1=0.8701 (best 0.8701)
+  trial   9/20: CV F1=0.8311 (best 0.8701)
+  trial  10/20: CV F1=0.8311 (best 0.8701)
+  trial  11/20: CV F1=0.8646 (best 0.8701)
+  trial  12/20: CV F1=0.8667 (best 0.8701)
+  trial  13/20: CV F1=0.8575 (best 0.8701)
+  trial  14/20: CV F1=0.8681 (best 0.8701)
+  trial  15/20: CV F1=0.8706 (best 0.8706)
+  trial  16/20: CV F1=0.8692 (best 0.8706)
+  trial  17/20: CV F1=0.8642 (best 0.8706)
+  trial  18/20: CV F1=0.8527 (best 0.8706)
+  trial  19/20: CV F1=0.8664 (best 0.8706)
+  trial  20/20: CV F1=0.8654 (best 0.8706)
+              model  precision  recall  f1_score  auc_roc  fp  fn
+            XGBoost     0.9375  0.7895    0.8571   0.9704   5  20
+Logistic Regression     0.8272  0.7053    0.7614   0.9749  14  28
+      Random Forest     0.8929  0.7895    0.8380   0.9783   9  20
+           LightGBM     0.8132  0.7789    0.7957   0.9515  17  21
+split took 527s
+
+=== Split 2/5 (seed 102) ===
+  trial   1/20: CV F1=0.8426 (best 0.8426)
+  trial   2/20: CV F1=0.8571 (best 0.8571)
+  trial   3/20: CV F1=0.8649 (best 0.8649)
+  trial   4/20: CV F1=0.8282 (best 0.8649)
+  trial   5/20: CV F1=0.8636 (best 0.8649)
+  trial   6/20: CV F1=0.8648 (best 0.8649)
+  trial   7/20: CV F1=0.8624 (best 0.8649)
+  trial   8/20: CV F1=0.8592 (best 0.8649)
+  trial   9/20: CV F1=0.8613 (best 0.8649)
+  trial  10/20: CV F1=0.8343 (best 0.8649)
+  trial  11/20: CV F1=0.8621 (best 0.8649)
+  trial  12/20: CV F1=0.8732 (best 0.8732)
+  trial  13/20: CV F1=0.8698 (best 0.8732)
+  trial  14/20: CV F1=0.8683 (best 0.8732)
+  trial  15/20: CV F1=0.8696 (best 0.8732)
+  trial  16/20: CV F1=0.8745 (best 0.8745)
+  trial  17/20: CV F1=0.8616 (best 0.8745)
+  trial  18/20: CV F1=0.8652 (best 0.8745)
+  trial  19/20: CV F1=0.8668 (best 0.8745)
+  trial  20/20: CV F1=0.8748 (best 0.8748)
+              model  precision  recall  f1_score  auc_roc  fp  fn
+            XGBoost     0.9412  0.6737    0.7853   0.9524   4  31
+Logistic Regression     0.7326  0.6632    0.6961   0.9583  23  32
+      Random Forest     0.8434  0.7368    0.7865   0.9563  13  25
+           LightGBM     0.9706  0.6947    0.8098   0.9671   2  29
+split took 318s
+
+=== Split 3/5 (seed 103) ===
+  trial   1/20: CV F1=0.8617 (best 0.8617)
+  trial   2/20: CV F1=0.8254 (best 0.8617)
+  trial   3/20: CV F1=0.8604 (best 0.8617)
+  trial   4/20: CV F1=0.8340 (best 0.8617)
+  trial   5/20: CV F1=0.8637 (best 0.8637)
+  trial   6/20: CV F1=0.8240 (best 0.8637)
+  trial   7/20: CV F1=0.8637 (best 0.8637)
+  trial   8/20: CV F1=0.8632 (best 0.8637)
+  trial   9/20: CV F1=0.8503 (best 0.8637)
+  trial  10/20: CV F1=0.8621 (best 0.8637)
+  trial  11/20: CV F1=0.8551 (best 0.8637)
+  trial  12/20: CV F1=0.8612 (best 0.8637)
+  trial  13/20: CV F1=0.8621 (best 0.8637)
+  trial  14/20: CV F1=0.8600 (best 0.8637)
+  trial  15/20: CV F1=0.8615 (best 0.8637)
+  trial  16/20: CV F1=0.8621 (best 0.8637)
+  trial  17/20: CV F1=0.8620 (best 0.8637)
+  trial  18/20: CV F1=0.8657 (best 0.8657)
+  trial  19/20: CV F1=0.8641 (best 0.8657)
+  trial  20/20: CV F1=0.8652 (best 0.8657)
+              model  precision  recall  f1_score  auc_roc  fp  fn
+            XGBoost     0.9268  0.8000    0.8588   0.9769   6  19
+Logistic Regression     0.7857  0.8105    0.7979   0.9763  21  18
+      Random Forest     0.8495  0.8316    0.8404   0.9665  14  16
+           LightGBM     0.8902  0.7684    0.8249   0.9629   9  22
+split took 374s
+
+=== Split 4/5 (seed 104) ===
+  trial   1/20: CV F1=0.8433 (best 0.8433)
+  trial   2/20: CV F1=0.8514 (best 0.8514)
+  trial   3/20: CV F1=0.8261 (best 0.8514)
+  trial   4/20: CV F1=0.8551 (best 0.8551)
+  trial   5/20: CV F1=0.8517 (best 0.8551)
+  trial   6/20: CV F1=0.8521 (best 0.8551)
+  trial   7/20: CV F1=0.8263 (best 0.8551)
+  trial   8/20: CV F1=0.8270 (best 0.8551)
+  trial   9/20: CV F1=0.8357 (best 0.8551)
+  trial  10/20: CV F1=0.8317 (best 0.8551)
+  trial  11/20: CV F1=0.8534 (best 0.8551)
+  trial  12/20: CV F1=0.8555 (best 0.8555)
+  trial  13/20: CV F1=0.8538 (best 0.8555)
+  trial  14/20: CV F1=0.8601 (best 0.8601)
+  trial  15/20: CV F1=0.8538 (best 0.8601)
+  trial  16/20: CV F1=0.8522 (best 0.8601)
+  trial  17/20: CV F1=0.8584 (best 0.8601)
+  trial  18/20: CV F1=0.8551 (best 0.8601)
+  trial  19/20: CV F1=0.8588 (best 0.8601)
+  trial  20/20: CV F1=0.8555 (best 0.8601)
+              model  precision  recall  f1_score  auc_roc  fp  fn
+            XGBoost     0.9211  0.7368    0.8187   0.9700   6  25
+Logistic Regression     0.7640  0.7158    0.7391   0.9792  21  27
+      Random Forest     0.8889  0.7579    0.8182   0.9842   9  23
+           LightGBM     0.8875  0.7474    0.8114   0.9534   9  24
+split took 581s
+
+=== Split 5/5 (seed 105) ===
+  trial   1/20: CV F1=0.8224 (best 0.8224)
+  trial   2/20: CV F1=0.8509 (best 0.8509)
+  trial   3/20: CV F1=0.8217 (best 0.8509)
+  trial   4/20: CV F1=0.8519 (best 0.8519)
+  trial   5/20: CV F1=0.8367 (best 0.8519)
+  trial   6/20: CV F1=0.8471 (best 0.8519)
+  trial   7/20: CV F1=0.8067 (best 0.8519)
+  trial   8/20: CV F1=0.8515 (best 0.8519)
+  trial   9/20: CV F1=0.8477 (best 0.8519)
+  trial  10/20: CV F1=0.8261 (best 0.8519)
+  trial  11/20: CV F1=0.8403 (best 0.8519)
+  trial  12/20: CV F1=0.8535 (best 0.8535)
+  trial  13/20: CV F1=0.8459 (best 0.8535)
+  trial  14/20: CV F1=0.8282 (best 0.8535)
+  trial  15/20: CV F1=0.8473 (best 0.8535)
+  trial  16/20: CV F1=0.8522 (best 0.8535)
+  trial  17/20: CV F1=0.8502 (best 0.8535)
+  trial  18/20: CV F1=0.8506 (best 0.8535)
+  trial  19/20: CV F1=0.8494 (best 0.8535)
+  trial  20/20: CV F1=0.8489 (best 0.8535)
+              model  precision  recall  f1_score  auc_roc  fp  fn
+            XGBoost     0.8837  0.8000    0.8398   0.9788  10  19
+Logistic Regression     0.8118  0.7263    0.7667   0.9684  16  26
+      Random Forest     0.8929  0.7895    0.8380   0.9715   9  20
+           LightGBM     0.9048  0.8000    0.8492   0.9746   8  19
+split took 317s
+
+=== Across splits: mean ± std (min-max) ===
+XGBoost              precision=0.922±0.023 (0.884-0.941)  recall=0.760±0.055 (0.674-0.800)  f1_score=0.832±0.031 (0.785-0.859)  auc_roc=0.970±0.010 (0.952-0.979)
+Random Forest        precision=0.873±0.025 (0.843-0.893)  recall=0.781±0.036 (0.737-0.832)  f1_score=0.824±0.023 (0.787-0.840)  auc_roc=0.971±0.011 (0.956-0.984)
+LightGBM             precision=0.893±0.056 (0.813-0.971)  recall=0.758±0.040 (0.695-0.800)  f1_score=0.818±0.020 (0.796-0.849)  auc_roc=0.962±0.010 (0.952-0.975)
+Logistic Regression  precision=0.784±0.038 (0.733-0.827)  recall=0.724±0.054 (0.663-0.811)  f1_score=0.752±0.038 (0.696-0.798)  auc_roc=0.971±0.008 (0.958-0.979)
+
+Paired F1, XGBoost minus baseline: {
+ "Random Forest": {
+  "mean_diff": 0.007713318213211995,
+  "xgboost_wins": 4,
+  "ties": 0,
+  "splits": 5
+ },
+ "LightGBM": {
+  "mean_diff": 0.013740846682262076,
+  "xgboost_wins": 3,
+  "ties": 0,
+  "splits": 5
+ },
+ "Logistic Regression": {
+  "mean_diff": 0.07968953061775004,
+  "xgboost_wins": 5,
+  "ties": 0,
+  "splits": 5
+ }
+}
+
+Bootstrap 95% CI on main test set:
+XGBoost              precision=0.960 [0.908, 1.000]  recall=0.758 [0.672, 0.843]  f1_score=0.847 [0.788, 0.900]  auc_roc=0.978 [0.960, 0.992]
+Random Forest        precision=0.947 [0.893, 0.988]  recall=0.758 [0.673, 0.842]  f1_score=0.842 [0.777, 0.897]  auc_roc=0.961 [0.931, 0.985]
+LightGBM             precision=0.889 [0.813, 0.951]  recall=0.758 [0.670, 0.839]  f1_score=0.818 [0.753, 0.874]  auc_roc=0.972 [0.949, 0.990]
+Logistic Regression  precision=0.826 [0.744, 0.899]  recall=0.747 [0.657, 0.828]  f1_score=0.785 [0.715, 0.842]  auc_roc=0.967 [0.944, 0.987]
