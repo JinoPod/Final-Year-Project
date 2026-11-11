@@ -1,0 +1,186 @@
+{
+  "threshold": 0.8141016364097595,
+  "base_value_log_odds": -2.7964468002319336,
+  "counts": {
+    "tp": 72,
+    "fp": 3,
+    "fn": 23,
+    "tn": 56648
+  },
+  "case_selection_rule": "One example of each outcome, chosen by a fixed rule so the figure is reproducible:\n      TP - the caught fraud with the median score among caught frauds (a typical catch)\n      FP - the legitimate transaction with the highest score (the worst false alarm)\n      FN - the missed fraud with the highest score (the nearest miss)",
+  "cases": {
+    "true_positive": {
+      "test_index": 36755,
+      "actual_class": 1,
+      "fraud_probability": 0.9997,
+      "amount": 720.38,
+      "top_factors": "V14 = -6.68 (raises risk), V10 = -3.62 (raises risk), V17 = -8.76 (raises risk), V12 = -5.58 (raises risk), V4 = 6.61 (raises risk)"
+    },
+    "false_positive": {
+      "test_index": 33810,
+      "actual_class": 0,
+      "fraud_probability": 0.9998,
+      "amount": 109.9,
+      "top_factors": "V14 = -7.11 (raises risk), V10 = -5.62 (raises risk), V17 = -12.13 (raises risk), V12 = -7.10 (raises risk), V8 = 1.68 (lowers risk)"
+    },
+    "false_negative": {
+      "test_index": 32879,
+      "actual_class": 1,
+      "fraud_probability": 0.7953,
+      "amount": 3.76,
+      "top_factors": "V4 = 2.68 (raises risk), V24 = -0.59 (lowers risk), V17 = 1.78 (raises risk), V19 = -1.31 (raises risk), V18 = 1.15 (raises risk)"
+    }
+  },
+  "global_importance": [
+    {
+      "feature": "V14",
+      "mean_abs_shap": 1.3442,
+      "mean_abs_shap_fraud_only": 3.2501
+    },
+    {
+      "feature": "V4",
+      "mean_abs_shap": 1.2195,
+      "mean_abs_shap_fraud_only": 0.8494
+    },
+    {
+      "feature": "V12",
+      "mean_abs_shap": 0.6097,
+      "mean_abs_shap_fraud_only": 1.3842
+    },
+    {
+      "feature": "V8",
+      "mean_abs_shap": 0.5425,
+      "mean_abs_shap_fraud_only": 0.5029
+    },
+    {
+      "feature": "V10",
+      "mean_abs_shap": 0.5318,
+      "mean_abs_shap_fraud_only": 1.7882
+    },
+    {
+      "feature": "V17",
+      "mean_abs_shap": 0.5023,
+      "mean_abs_shap_fraud_only": 1.5475
+    },
+    {
+      "feature": "V3",
+      "mean_abs_shap": 0.4874,
+      "mean_abs_shap_fraud_only": 0.5792
+    },
+    {
+      "feature": "V1",
+      "mean_abs_shap": 0.468,
+      "mean_abs_shap_fraud_only": 0.2079
+    },
+    {
+      "feature": "V11",
+      "mean_abs_shap": 0.4516,
+      "mean_abs_shap_fraud_only": 0.3869
+    },
+    {
+      "feature": "V18",
+      "mean_abs_shap": 0.4095,
+      "mean_abs_shap_fraud_only": 0.2586
+    },
+    {
+      "feature": "V22",
+      "mean_abs_shap": 0.2934,
+      "mean_abs_shap_fraud_only": 0.177
+    },
+    {
+      "feature": "V5",
+      "mean_abs_shap": 0.2743,
+      "mean_abs_shap_fraud_only": 0.1763
+    },
+    {
+      "feature": "Time",
+      "mean_abs_shap": 0.2588,
+      "mean_abs_shap_fraud_only": 0.2248
+    },
+    {
+      "feature": "V25",
+      "mean_abs_shap": 0.2323,
+      "mean_abs_shap_fraud_only": 0.2096
+    },
+    {
+      "feature": "V27",
+      "mean_abs_shap": 0.2315,
+      "mean_abs_shap_fraud_only": 0.1851
+    },
+    {
+      "feature": "V28",
+      "mean_abs_shap": 0.2307,
+      "mean_abs_shap_fraud_only": 0.252
+    },
+    {
+      "feature": "V15",
+      "mean_abs_shap": 0.2087,
+      "mean_abs_shap_fraud_only": 0.1776
+    },
+    {
+      "feature": "V24",
+      "mean_abs_shap": 0.1996,
+      "mean_abs_shap_fraud_only": 0.226
+    },
+    {
+      "feature": "Amount",
+      "mean_abs_shap": 0.1791,
+      "mean_abs_shap_fraud_only": 0.3804
+    },
+    {
+      "feature": "V26",
+      "mean_abs_shap": 0.171,
+      "mean_abs_shap_fraud_only": 0.1511
+    },
+    {
+      "feature": "V20",
+      "mean_abs_shap": 0.1659,
+      "mean_abs_shap_fraud_only": 0.1875
+    },
+    {
+      "feature": "V6",
+      "mean_abs_shap": 0.164,
+      "mean_abs_shap_fraud_only": 0.2258
+    },
+    {
+      "feature": "V9",
+      "mean_abs_shap": 0.1615,
+      "mean_abs_shap_fraud_only": 0.1962
+    },
+    {
+      "feature": "V19",
+      "mean_abs_shap": 0.1538,
+      "mean_abs_shap_fraud_only": 0.1462
+    },
+    {
+      "feature": "V2",
+      "mean_abs_shap": 0.1532,
+      "mean_abs_shap_fraud_only": 0.1726
+    },
+    {
+      "feature": "V23",
+      "mean_abs_shap": 0.1472,
+      "mean_abs_shap_fraud_only": 0.1702
+    },
+    {
+      "feature": "V13",
+      "mean_abs_shap": 0.1404,
+      "mean_abs_shap_fraud_only": 0.1263
+    },
+    {
+      "feature": "V16",
+      "mean_abs_shap": 0.1243,
+      "mean_abs_shap_fraud_only": 0.3102
+    },
+    {
+      "feature": "V7",
+      "mean_abs_shap": 0.124,
+      "mean_abs_shap_fraud_only": 0.3424
+    },
+    {
+      "feature": "V21",
+      "mean_abs_shap": 0.1179,
+      "mean_abs_shap_fraud_only": 0.1658
+    }
+  ]
+}

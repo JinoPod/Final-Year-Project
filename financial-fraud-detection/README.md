@@ -1,80 +1,88 @@
-# Financial Fraud Detection with Explainable AI
+# XAI-Based Fraud Detection
 
-This project implements a machine learning system for detecting fraudulent financial transactions using advanced ensemble methods and explainable AI techniques.
+An interpretable machine-learning system for credit card transaction monitoring.
+A tuned XGBoost model (trained with SMOTE) flags fraudulent transactions, SHAP explains
+each decision, and a Streamlit dashboard lets an analyst upload transactions, see the
+explanations and review an append-only audit log.
 
-## Project Overview
+Dataset: [European Credit Card Fraud](https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud)
+(284,807 transactions, 492 fraud; features `Time`, `V1`–`V28` (PCA), `Amount`, label `Class`).
 
-The system processes synthetic financial transaction data to build models that can:
-1. Accurately detect fraudulent transactions with high precision and recall
-2. Provide explainable results using SHAP and LIME
-3. Visualize insights through an interactive dashboard
+## Results (held-out test set, 56,746 transactions, 95 fraud)
 
-## Features
+| Model | Precision | Recall | F1 | ROC-AUC |
+|---|---|---|---|---|
+| **XGBoost (primary)** | **0.960** | 0.758 | **0.847** | 0.978 |
+| Random Forest | 0.947 | 0.758 | 0.842 | 0.961 |
+| LightGBM | 0.889 | 0.758 | 0.818 | 0.972 |
+| Logistic Regression | 0.826 | 0.747 | 0.785 | 0.967 |
 
-- **Data Preprocessing**: Cleaning, normalization, and feature engineering
-- **Imbalance Handling**: SMOTE, SMOTE-Tomek, and other resampling techniques
-- **Model Development**: Random Forest, XGBoost, LightGBM with hyperparameter tuning
-- **Explainable AI**: SHAP and LIME integration for model interpretability
-- **Interactive Dashboard**: Streamlit-based visualization for monitoring and explanation
+Stability over 5 independently re-tuned splits: XGBoost F1 **0.832 ± 0.031**,
+precision 0.922 ± 0.023, recall 0.760 ± 0.055 (`models/results/stability.json`).
+Full numbers: `models/results/metrics.json`.
 
-## Project Structure
+## Setup
 
-```
-ffd_project/
-├── data/                      # Data storage
-│   └── processed/             # Processed datasets
-├── notebooks/                 # Jupyter notebooks for exploration
-├── src/                       # Source code
-│   ├── data/                  # Data processing modules
-│   ├── features/              # Feature engineering
-│   ├── models/                # Model training and evaluation
-│   └── visualization/         # Visualization and dashboard
-├── models/                    # Saved model files
-├── dashboard/                 # Dashboard application
-├── requirements.txt           # Project dependencies
-└── README.md                  # Project documentation
-```
-
-## Installation
+Requires Python 3.11 (the saved models were pickled with scikit-learn 1.9.0).
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/financial-fraud-detection.git
-cd financial-fraud-detection
-
-# Install dependencies
+conda create -n fyp python=3.11
+conda activate fyp
 pip install -r requirements.txt
 ```
 
-## Usage
+Place `creditcard.csv` in `data/raw/`.
 
-1. **Data Preprocessing**:
-   ```bash
-   python src/data/preprocess.py
-   ```
+## Pipeline
 
-2. **Model Training**:
-   ```bash
-   python src/models/train_model.py
-   ```
+Run from this folder (`financial-fraud-detection/`), in order:
 
-3. **Run Dashboard**:
-   ```bash
-   streamlit run dashboard/app.py
-   ```
+```bash
+python src/data/preprocess.py          # clean, scale, stratified 80/20 split -> data/processed/
+python src/models/train_model.py       # Optuna-tuned XGBoost + baselines -> models/models/, models/results/
+python src/models/stability.py         # 5 re-tuned splits + bootstrap CIs (slow, ~1h)
+python src/models/report_figures.py    # SHAP summary + example waterfalls -> models/visualizations/report/
+python src/data/make_sample.py         # demo CSVs for the upload page -> data/sample/
+```
 
-## Performance Metrics
+Training is leak-free: SMOTE is applied only inside cross-validation training folds, the
+decision threshold is chosen on out-of-fold predictions, and the test set is used once.
 
-The system aims to achieve:
-- F1-score: ~0.92
-- AUC-ROC: ~0.96
-- High recall to catch more fraud cases
-- Balanced precision to reduce false alarms
+## Dashboard
 
-## Dashboard Preview
+```bash
+streamlit run dashboard/app.py
+```
 
-The dashboard provides:
-- Real-time fraud detection monitoring
-- Model explanation for individual transactions
-- Feature importance visualization
-- Performance metrics tracking
+Then open http://localhost:8501. Pages:
+
+- **Home**: project overview
+- **Upload & Score**: upload a CSV, get fraud scores and a SHAP explanation per row; each upload is written to the audit log
+- **Audit Log**: browse past batches and decisions; stored input hashes are re-checked to detect tampering
+- **Model Performance**: metrics, confusion matrices, ROC/PR curves for all models
+- **Transaction Explanation**: SHAP explanation for any test transaction
+- **Live Monitoring**: simulated transaction stream
+
+Try the upload page with `data/sample/sample_transactions.csv` (1,000 test transactions, 30 fraud).
+The audit log is stored in `logs/audit.db` (SQLite, append-only).
+
+## Project structure
+
+```
+financial-fraud-detection/
+├── dashboard/app.py            # Streamlit dashboard
+├── data/
+│   ├── raw/                    # creditcard.csv (not in git)
+│   ├── processed/              # scaled train/test arrays + preprocessor.pkl
+│   └── sample/                 # demo upload files
+├── logs/audit.db               # audit log (created on first upload, not in git)
+├── models/
+│   ├── models/                 # saved models (*.pkl)
+│   ├── results/                # metrics, stability results, logs
+│   └── visualizations/         # charts, incl. report/ figures
+└── src/
+    ├── data/                   # preprocess.py, make_sample.py
+    ├── models/                 # train_model.py, stability.py, report_figures.py
+    ├── inference.py            # scoring + SHAP for uploaded rows
+    └── audit_log.py            # append-only SQLite audit log
+```
