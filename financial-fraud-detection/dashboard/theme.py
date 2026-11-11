@@ -59,7 +59,9 @@ h2, h3, h4 {{ color: {NAVY}; }}
     box-shadow: 0 1px 3px rgba(31, 58, 95, 0.06);
 }}
 [data-testid="stMetricLabel"] p {{ color: {MUTED}; font-size: 0.85rem; }}
-[data-testid="stMetricValue"] {{ color: {NAVY}; }}
+[data-testid="stMetricValue"] {{ color: {NAVY}; font-size: 1.75rem; }}
+[data-testid="stMetricValue"] *, [data-testid="stMetricLabel"] * {{
+    white-space: normal !important; overflow: visible !important; text-overflow: clip !important; }}
 
 /* Expanders and dataframes as soft cards */
 [data-testid="stExpander"] details {{ background: {CARD}; border-color: {BORDER}; border-radius: 10px; }}
@@ -71,6 +73,29 @@ h2, h3, h4 {{ color: {NAVY}; }}
                   margin-bottom: 0.8rem; }}
 .sidebar-brand .name {{ color: {GOLD_LIGHT}; font-family: serif; font-size: 1.35rem; font-weight: 700; }}
 .sidebar-brand .tag {{ color: #C9D3E0; font-size: 0.8rem; margin-top: 0.15rem; }}
+.nav-label {{ color: #C9D3E0; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em;
+              margin: 0.2rem 0 0.1rem 0.2rem; }}
+
+/* Sidebar navigation: flat buttons, the current page highlighted in gold */
+[data-testid="stSidebar"] .stButton {{ margin-bottom: -0.55rem; }}
+[data-testid="stSidebar"] .stButton button {{
+    justify-content: flex-start; text-align: left; border: none; border-radius: 8px;
+    background: transparent; color: #F5EFE3; padding: 0.5rem 0.8rem;
+    border-left: 4px solid transparent; transition: background 0.15s;
+}}
+[data-testid="stSidebar"] .stButton button div {{ justify-content: flex-start; }}
+[data-testid="stSidebar"] .stButton button:hover {{ background: rgba(255, 255, 255, 0.08); color: #FFFFFF; }}
+[data-testid="stSidebar"] .stButton button[kind="primary"] {{
+    background: rgba(217, 180, 90, 0.18); border-left: 4px solid {GOLD_LIGHT};
+    color: {GOLD_LIGHT}; font-weight: 600;
+}}
+[data-testid="stSidebar"] .stButton button:focus:not(:active) {{ box-shadow: none; }}
+
+/* Home page cards: "Open" button pinned to the bottom of each card */
+.st-key-home_cards [data-testid="stVerticalBlock"] {{ height: 100%; }}
+.st-key-home_cards [data-testid="stElementContainer"]:has(.stButton) {{ margin-top: auto; }}
+.st-key-home_cards .stButton button {{ background: {NAVY}; color: {CREME}; border: none; }}
+.st-key-home_cards .stButton button:hover {{ background: {NAVY_DARK}; color: {GOLD_LIGHT}; }}
 
 /* Home hero banner */
 .hero {{ background: linear-gradient(135deg, {NAVY} 0%, {NAVY_DARK} 100%); color: {CREME};
@@ -174,7 +199,7 @@ def _layout(fig, x_title, y_title, height=400):
     fig.update_layout(
         height=height, margin=dict(l=70, r=20, t=20, b=60), showlegend=False,
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color=INK, family="sans-serif", size=13),
+        font=dict(color=INK, family="sans-serif", size=15),
         hoverlabel=dict(bgcolor=CARD, bordercolor=BORDER, font_color=INK),
     )
     axis = dict(gridcolor=GRID, zeroline=False, linecolor=BORDER, tickformat=".0%",
@@ -196,7 +221,7 @@ def _rates_at(y_true, proba, threshold):
 def _operating_point(fig, x, y, text, position="bottom left"):
     fig.add_trace(go.Scatter(
         x=[x], y=[y], mode="markers+text", text=[text], textposition=position,
-        textfont=dict(color=INK, size=12),
+        textfont=dict(color=INK, size=14),
         marker=dict(size=11, color=NAVY, line=dict(color=CREME, width=2)),
         hovertemplate=f"{text}<extra></extra>"))
 
@@ -214,7 +239,7 @@ def roc_chart(y_true, proba, threshold):
     fig.add_annotation(x=0.98, y=0.04, xanchor="right", showarrow=False,
                        text=f"AUC {auc(fpr, tpr):.3f}", font=dict(color=MUTED))
     fig.add_annotation(x=0.62, y=0.55, showarrow=False, text="random guessing",
-                       font=dict(color=MUTED, size=11), textangle=-38)
+                       font=dict(color=MUTED, size=13), textangle=-38)
     return _layout(fig, "False alarm rate", "Share of frauds caught")
 
 
@@ -248,7 +273,7 @@ def reasons_chart(reason_list):
     fig.update_layout(
         height=70 + 44 * len(rs), margin=dict(l=120, r=10, t=10, b=40), showlegend=False,
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color=INK, family="sans-serif", size=13),
+        font=dict(color=INK, family="sans-serif", size=15),
         hoverlabel=dict(bgcolor=CARD, bordercolor=BORDER, font_color=INK),
         xaxis=dict(title="← legitimate   |   fraud →", showticklabels=False,
                    zeroline=False, showgrid=False),

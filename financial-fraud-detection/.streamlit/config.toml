@@ -17,6 +17,7 @@ borderColor = "#E4D9C3"
 showWidgetBorder = true
 baseRadius = "medium"
 font = "sans-serif"
+baseFontSize = 18
 headingFont = "serif"
 dataframeHeaderBackgroundColor = "#EFE6D3"
 redColor = "#B23A30"

@@ -511,17 +511,26 @@ PAGE_ICONS = {"Home": "🏠", "Upload & Score": "📤", "Audit Log": "🗂️",
               "Model Performance": "📊", "Transaction Explanation": "🔍"}
 
 
+def go_to(page):
+    """Button callback: switch page and keep the URL in sync so it can be bookmarked."""
+    st.session_state.page = page
+    st.query_params["page"] = page
+
+
 # Main function
 def main():
     """Main function for the dashboard."""
     theme.apply_theme()
     theme.sidebar_brand()
-    pages = list(PAGE_ICONS)
-    requested = st.query_params.get("page", "Home")  # e.g. ?page=Audit Log opens that page
-    page = st.sidebar.radio(
-        "Navigation", pages, index=pages.index(requested) if requested in pages else 0,
-        format_func=lambda p: PAGE_ICONS[p] + "  " + p,
-    )
+    if "page" not in st.session_state:  # ?page=Audit Log opens that page directly
+        requested = st.query_params.get("page", "Home")
+        st.session_state.page = requested if requested in PAGE_ICONS else "Home"
+    page = st.session_state.page
+
+    st.sidebar.markdown('<div class="nav-label">Navigation</div>', unsafe_allow_html=True)
+    for p, icon in PAGE_ICONS.items():
+        st.sidebar.button(f"{icon}  {p}", key=f"nav_{p}", on_click=go_to, args=(p,),
+                          type="primary" if p == page else "secondary", width="stretch")
     threshold = float(load_model()["metadata"]["threshold"])
     st.sidebar.markdown("---")
     st.sidebar.caption(f"Model: XGBoost, trained {str(load_model().get('timestamp', 'unknown'))[:10]}  \n"
@@ -545,11 +554,12 @@ def main():
             ("🔍", "Transaction Explanation", "Explore caught frauds, false alarms and missed frauds "
                                              "from the test set and see why each happened."),
         ]
-        cols = st.columns(4)
+        cols = st.container(key="home_cards").columns(4)
         for col, (icon, title, text) in zip(cols, cards):
-            with col.container(border=True):
+            with col.container(border=True, height="stretch"):
                 st.markdown(f"##### {icon} {title}")
                 st.caption(text)
+                st.button("Open →", key=f"card_{title}", on_click=go_to, args=(title,))
 
         st.subheader("Risk levels")
         st.markdown(risk_level_table(threshold))
