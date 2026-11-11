@@ -37,8 +37,8 @@ st.set_page_config(
 )
 
 # Define paths
-DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
-                        "Synthetic_Financial_datasets_log.csv")
+DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "data", "raw", "creditcard.csv")
 PROCESSED_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
                            "data", "processed")
 MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 

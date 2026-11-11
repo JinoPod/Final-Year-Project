@@ -37,3 +37,6 @@ Thumbs.db
 # Large model files
 models/*.pkl
 models/models/*.pkl
+
+# Local backups of processed data
+data/processed_backup*/

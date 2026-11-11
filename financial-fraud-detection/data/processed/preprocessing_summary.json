@@ -1,0 +1,31 @@
+{
+  "source_file": "creditcard.csv",
+  "raw": {
+    "rows": 284807,
+    "columns": 31,
+    "fraud": 492,
+    "legitimate": 284315,
+    "fraud_rate": 0.001727485630620034,
+    "missing_values": 0,
+    "duplicate_rows": 1081
+  },
+  "after_cleaning": {
+    "rows": 283726,
+    "columns": 31,
+    "fraud": 473,
+    "legitimate": 283253,
+    "fraud_rate": 0.001667101358352777,
+    "missing_values": 0,
+    "duplicate_rows": 0
+  },
+  "test_size": 0.2,
+  "random_state": 42,
+  "train_rows": 226980,
+  "train_fraud": 378,
+  "test_rows": 56746,
+  "test_fraud": 95,
+  "scaled_columns": [
+    "Time",
+    "Amount"
+  ]
+}

@@ -1,308 +1,189 @@
 """
-Data preprocessing module for financial fraud detection.
-This module handles loading, cleaning, and preprocessing the financial dataset.
+Data preprocessing for the European Credit Card Fraud dataset (Kaggle / ULB).
+
+Implements Section 3.3 of the report:
+  i)   Data cleaning  - check missing values and duplicates, scale Time and Amount
+                        so they sit in a comparable range to the PCA features V1-V28.
+  iii) Train/test split - stratified split; the test set keeps the original,
+                        imbalanced class distribution.
+SMOTE (step ii) is applied later to the training split only, in the training
+pipeline, never here.
+
+The scaler is fitted on the training split only (no information from the test
+set leaks into it) and saved as preprocessor.pkl, so the dashboard can apply the
+exact same transformation to uploaded transactions at inference time.
 """
 
-import pandas as pd
-import numpy as np
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.model_selection import train_test_split
-import category_encoders as ce
 import os
+import json
+
 import joblib
+import numpy as np
+import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+
+TARGET_COL = "Class"
+PCA_COLS = [f"V{i}" for i in range(1, 29)]
+SCALED_COLS = ["Time", "Amount"]
+# Column order the models expect (same order as the original dataset).
+FEATURE_COLS = ["Time"] + PCA_COLS + ["Amount"]
+
 
 def load_data(file_path):
-    """
-    Load the financial dataset from CSV file.
-    
-    Args:
-        file_path (str): Path to the CSV file
-        
-    Returns:
-        pd.DataFrame: Loaded dataset
-    """
+    """Load the dataset and check it has the expected schema."""
     print(f"Loading data from {file_path}...")
-    return pd.read_csv(file_path)
+    df = pd.read_csv(file_path)
+    validate_schema(df, require_target=True)
+    return df
+
+
+def validate_schema(df, require_target=False):
+    """
+    Check that a DataFrame has the columns the model needs.
+
+    Used for both the training CSV and transactions uploaded to the dashboard
+    (Section 3.6.2 i). Raises ValueError with a readable message if not.
+    """
+    required = FEATURE_COLS + ([TARGET_COL] if require_target else [])
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+    non_numeric = [c for c in FEATURE_COLS if not pd.api.types.is_numeric_dtype(df[c])]
+    if non_numeric:
+        raise ValueError(f"Columns must be numeric: {non_numeric}")
+
 
 def analyze_data(df):
-    """
-    Analyze the dataset and print basic statistics.
-    
-    Args:
-        df (pd.DataFrame): Input dataset
-        
-    Returns:
-        dict: Dictionary containing data analysis results
-    """
-    print("Analyzing data...")
-    
-    # Basic information
-    print(f"Dataset shape: {df.shape}")
-    
-    # Check for missing values
-    missing_values = df.isnull().sum()
-    print(f"Missing values:\n{missing_values[missing_values > 0]}")
-    
-    # Class distribution
-    if 'Class' in df.columns:
-        fraud_count = df['Class'].sum()
-        total_count = len(df)
-        fraud_ratio = fraud_count / total_count
-        print(f"Fraud transactions: {fraud_count} ({fraud_ratio:.4%})")
-        print(f"Normal transactions: {total_count - fraud_count} ({1-fraud_ratio:.4%})")
-    
-    # Data types
-    print("Data types:")
-    print(df.dtypes)
-    
-    # Return analysis results
-    return {
-        'shape': df.shape,
-        'missing_values': missing_values.to_dict(),
-        'fraud_ratio': fraud_ratio if 'is_fraud' in df.columns else None,
-        'dtypes': df.dtypes.to_dict()
+    """Print and return basic dataset statistics."""
+    fraud_count = int(df[TARGET_COL].sum())
+    total = len(df)
+    stats = {
+        "rows": total,
+        "columns": df.shape[1],
+        "fraud": fraud_count,
+        "legitimate": total - fraud_count,
+        "fraud_rate": fraud_count / total,
+        "missing_values": int(df.isna().sum().sum()),
+        "duplicate_rows": int(df.duplicated().sum()),
     }
+    print(f"Dataset shape: {df.shape}")
+    print(f"Fraud: {stats['fraud']} ({stats['fraud_rate']:.4%}), "
+          f"legitimate: {stats['legitimate']}")
+    print(f"Missing values: {stats['missing_values']}, "
+          f"duplicate rows: {stats['duplicate_rows']}")
+    return stats
+
 
 def clean_data(df):
     """
-    Clean the dataset by handling missing values and outliers.
-    
-    Args:
-        df (pd.DataFrame): Input dataset
-        
-    Returns:
-        pd.DataFrame: Cleaned dataset
-    """
-    print("Cleaning data...")
-    
-    # Create a copy to avoid modifying the original dataframe
-    df_cleaned = df.copy()
-    
-    # Handle missing values
-    for column in df_cleaned.columns:
-        if df_cleaned[column].dtype == 'object':
-            # For categorical columns, fill with the most frequent value
-            df_cleaned[column].fillna(df_cleaned[column].mode()[0], inplace=True)
-        else:
-            # For numerical columns, fill with the median
-            df_cleaned[column].fillna(df_cleaned[column].median(), inplace=True)
-    
-    # Convert timestamp columns if they exist
-    if 'trans_date_trans_time' in df_cleaned.columns:
-        df_cleaned['trans_date_trans_time'] = pd.to_datetime(df_cleaned['trans_date_trans_time'])
-    
-    return df_cleaned
+    Remove duplicate rows and rows with missing values.
 
-def engineer_features(df):
+    The raw dataset contains ~1,081 exact duplicate transactions. Leaving them
+    in lets identical rows land in both train and test sets, which inflates the
+    test scores, so they are dropped before splitting.
     """
-    Create new features to improve model performance.
-    
-    Args:
-        df (pd.DataFrame): Input dataset
-        
-    Returns:
-        pd.DataFrame: Dataset with engineered features
-    """
-    print("Engineering features...")
-    
-    # Create a copy to avoid modifying the original dataframe
-    df_featured = df.copy()
-    
-    # Time-based features if timestamp column exists
-    if 'trans_date_trans_time' in df_featured.columns:
-        df_featured['hour'] = df_featured['trans_date_trans_time'].dt.hour
-        df_featured['day'] = df_featured['trans_date_trans_time'].dt.day
-        df_featured['day_of_week'] = df_featured['trans_date_trans_time'].dt.dayofweek
-        df_featured['month'] = df_featured['trans_date_trans_time'].dt.month
-        
-        # Group transactions by customer and sort by time
-        if 'cc_num' in df_featured.columns:
-            # Create a copy of the dataframe sorted by customer and time
-            df_sorted = df_featured.sort_values(['cc_num', 'trans_date_trans_time']).copy()
-            
-            # Calculate time difference between consecutive transactions for each customer
-            df_sorted['prev_time'] = df_sorted.groupby('cc_num')['trans_date_trans_time'].shift(1)
-            df_sorted['time_diff'] = (df_sorted['trans_date_trans_time'] - df_sorted['prev_time']).dt.total_seconds() / 3600  # in hours
-            
-            # Merge the time difference back to the original dataframe
-            df_featured = df_featured.merge(df_sorted[['cc_num', 'trans_date_trans_time', 'time_diff']], 
-                                           on=['cc_num', 'trans_date_trans_time'], 
-                                           how='left')
-    
-    # Amount-based features
-    if 'amt' in df_featured.columns:
-        # Calculate transaction amount statistics for each customer
-        customer_stats = df_featured.groupby('cc_num')['amt'].agg(['mean', 'std', 'max']).reset_index()
-        customer_stats.columns = ['cc_num', 'customer_avg_amt', 'customer_std_amt', 'customer_max_amt']
-        
-        # Merge statistics back to the original dataframe
-        df_featured = df_featured.merge(customer_stats, on='cc_num', how='left')
-        
-        # Calculate amount ratio compared to customer average
-        df_featured['amt_to_avg_ratio'] = df_featured['amt'] / df_featured['customer_avg_amt']
-        
-        # Flag high-value transactions (above 2 standard deviations)
-        df_featured['is_high_value'] = ((df_featured['amt'] > df_featured['customer_avg_amt'] + 2 * df_featured['customer_std_amt']) 
-                                       & (df_featured['customer_std_amt'] > 0)).astype(int)
-    
-    # Merchant-based features
-    if 'merchant' in df_featured.columns:
-        # Calculate fraud rate by merchant
-        merchant_fraud = df_featured.groupby('merchant')['Class'].agg(['mean', 'count']).reset_index()
-        merchant_fraud.columns = ['merchant', 'merchant_fraud_rate', 'merchant_trans_count']
-        
-        # Merge merchant statistics back to the original dataframe
-        df_featured = df_featured.merge(merchant_fraud, on='merchant', how='left')
-    
-    # Category-based features
-    if 'category' in df_featured.columns:
-        # Calculate fraud rate by category
-        category_fraud = df_featured.groupby('category')['Class'].agg(['mean', 'count']).reset_index()
-        category_fraud.columns = ['category', 'category_fraud_rate', 'category_trans_count']
-        
-        # Merge category statistics back to the original dataframe
-        df_featured = df_featured.merge(category_fraud, on='category', how='left')
-    
-    return df_featured
+    before = len(df)
+    df = df.drop_duplicates()
+    dropped_dupes = before - len(df)
 
-def prepare_features_targets(df, target_col='Class'):
-    """
-    Separate features and target variable.
-    
-    Args:
-        df (pd.DataFrame): Input dataset
-        target_col (str): Name of the target column
-        
-    Returns:
-        tuple: (X, y) where X is the feature matrix and y is the target vector
-    """
-    print("Preparing features and target...")
-    
-    # Identify categorical and numerical columns
-    categorical_cols = [col for col in df.columns if df[col].dtype == 'object']
-    numerical_cols = [col for col in df.columns if df[col].dtype != 'object' and col != target_col]
-    
-    # Remove non-feature columns
-    exclude_cols = [target_col, 'trans_date_trans_time', 'cc_num', 'prev_time']
-    feature_cols = [col for col in df.columns if col not in exclude_cols]
-    
-    # Separate features and target
-    X = df[feature_cols]
-    y = df[target_col]
-    
-    return X, y, categorical_cols, numerical_cols
+    before = len(df)
+    df = df.dropna()
+    dropped_missing = before - len(df)
 
-def create_preprocessing_pipeline(categorical_cols, numerical_cols):
+    print(f"Removed {dropped_dupes} duplicate rows and {dropped_missing} rows with missing values")
+    return df.reset_index(drop=True)
+
+
+def create_preprocessor():
     """
-    Create a preprocessing pipeline for categorical and numerical features.
-    
-    Args:
-        categorical_cols (list): List of categorical column names
-        numerical_cols (list): List of numerical column names
-        
-    Returns:
-        ColumnTransformer: Preprocessing pipeline
+    Scale Time and Amount; pass V1-V28 through unchanged (already PCA-scaled).
+
+    The transformers are listed in the original column order so the output
+    keeps the order Time, V1..V28, Amount.
     """
-    print("Creating preprocessing pipeline...")
-    
-    # Categorical features preprocessing
-    categorical_transformer = Pipeline(steps=[
-        ('target_encoder', ce.TargetEncoder())  # Target encoding works well for fraud detection
-    ])
-    
-    # Numerical features preprocessing
-    numerical_transformer = Pipeline(steps=[
-        ('scaler', StandardScaler())
-    ])
-    
-    # Combine preprocessing steps
-    preprocessor = ColumnTransformer(
+    return ColumnTransformer(
         transformers=[
-            ('num', numerical_transformer, numerical_cols),
-            ('cat', categorical_transformer, categorical_cols)
-        ])
-    
-    return preprocessor
+            ("time", StandardScaler(), ["Time"]),
+            ("pca", "passthrough", PCA_COLS),
+            ("amount", StandardScaler(), ["Amount"]),
+        ],
+        verbose_feature_names_out=False,
+    )
+
 
 def preprocess_data(file_path, test_size=0.2, random_state=42, output_dir=None):
     """
-    Main function to preprocess the data.
-    
-    Args:
-        file_path (str): Path to the input CSV file
-        test_size (float): Proportion of the dataset to include in the test split
-        random_state (int): Random seed for reproducibility
-        output_dir (str): Directory to save the processed data
-        
+    Load, clean, split and scale the dataset.
+
     Returns:
-        tuple: (X_train, X_test, y_train, y_test, preprocessor)
+        tuple: (X_train, X_test, y_train, y_test, preprocessor, feature_names)
+               X arrays are scaled numpy arrays; y arrays are numpy int arrays.
     """
-    # Load data
     df = load_data(file_path)
-    
-    # Analyze data
-    analyze_data(df)
-    
-    # Clean data
-    df_cleaned = clean_data(df)
-    
-    # Engineer features
-    df_featured = engineer_features(df_cleaned)
-    
-    # Prepare features and target
-    X, y, categorical_cols, numerical_cols = prepare_features_targets(df_featured)
-    
-    # Split data into train and test sets
+    raw_stats = analyze_data(df)
+
+    df = clean_data(df)
+    clean_stats = analyze_data(df)
+
+    X = df[FEATURE_COLS]
+    y = df[TARGET_COL].astype(int).to_numpy()
+
+    # Stratified split keeps the same fraud rate in train and test.
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, random_state=random_state, stratify=y
     )
-    
-    # Create preprocessing pipeline
-    preprocessor = create_preprocessing_pipeline(categorical_cols, numerical_cols)
-    
-    # Fit and transform the training data
-    X_train_processed = preprocessor.fit_transform(X_train, y_train)
-    
-    # Transform the test data
+
+    # Fit the scaler on training data only, then apply it to both splits.
+    preprocessor = create_preprocessor()
+    X_train_processed = preprocessor.fit_transform(X_train)
     X_test_processed = preprocessor.transform(X_test)
-    
-    # Save processed data if output directory is provided
+    feature_names = list(preprocessor.get_feature_names_out())
+    assert feature_names == FEATURE_COLS, feature_names
+
+    print(f"Train: {X_train_processed.shape}, fraud={y_train.sum()} ({y_train.mean():.4%})")
+    print(f"Test:  {X_test_processed.shape}, fraud={y_test.sum()} ({y_test.mean():.4%})")
+
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
-        
-        # Save preprocessor
-        joblib.dump(preprocessor, os.path.join(output_dir, 'preprocessor.pkl'))
-        
-        # Save processed data
-        np.save(os.path.join(output_dir, 'X_train.npy'), X_train_processed)
-        np.save(os.path.join(output_dir, 'X_test.npy'), X_test_processed)
-        np.save(os.path.join(output_dir, 'y_train.npy'), y_train.values)
-        np.save(os.path.join(output_dir, 'y_test.npy'), y_test.values)
-        
-        # Save column names for reference
-        with open(os.path.join(output_dir, 'feature_names.txt'), 'w') as f:
-            f.write('\n'.join(X.columns))
-    
-    return X_train_processed, X_test_processed, y_train, y_test, preprocessor, X_train.columns
+        joblib.dump(preprocessor, os.path.join(output_dir, "preprocessor.pkl"))
+        np.save(os.path.join(output_dir, "X_train.npy"), X_train_processed)
+        np.save(os.path.join(output_dir, "X_test.npy"), X_test_processed)
+        np.save(os.path.join(output_dir, "y_train.npy"), y_train)
+        np.save(os.path.join(output_dir, "y_test.npy"), y_test)
+        with open(os.path.join(output_dir, "feature_names.txt"), "w") as f:
+            f.write("\n".join(feature_names))
+        # Record what was done, for the report (dataset section) and reproducibility.
+        summary = {
+            "source_file": os.path.basename(file_path),
+            "raw": raw_stats,
+            "after_cleaning": clean_stats,
+            "test_size": test_size,
+            "random_state": random_state,
+            "train_rows": int(len(y_train)),
+            "train_fraud": int(y_train.sum()),
+            "test_rows": int(len(y_test)),
+            "test_fraud": int(y_test.sum()),
+            "scaled_columns": SCALED_COLS,
+        }
+        with open(os.path.join(output_dir, "preprocessing_summary.json"), "w") as f:
+            json.dump(summary, f, indent=2)
+        print(f"Saved processed data to {output_dir}")
+
+    return X_train_processed, X_test_processed, y_train, y_test, preprocessor, feature_names
+
 
 if __name__ == "__main__":
-    # Example usage
-    import os
-    
-    # Use absolute paths
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    data_file = os.path.join(base_dir, "Synthetic_Financial_datasets_log.csv")
+    data_file = os.path.join(base_dir, "data", "raw", "creditcard.csv")
     output_dir = os.path.join(base_dir, "data", "processed")
-    
-    print(f"Looking for dataset at: {data_file}")
-    print(f"Output directory: {output_dir}")
-    
-    X_train, X_test, y_train, y_test, preprocessor, feature_names = preprocess_data(
-        data_file, output_dir=output_dir
-    )
-    
-    print(f"Preprocessing complete. Processed data saved to {output_dir}")
-    print(f"Training set shape: {X_train.shape}")
-    print(f"Test set shape: {X_test.shape}")
+
+    if not os.path.exists(data_file):
+        raise SystemExit(
+            f"Dataset not found at {data_file}\n"
+            "Download the European Credit Card Fraud dataset (creditcard.csv) from Kaggle "
+            "and place it in data/raw/."
+        )
+
+    preprocess_data(data_file, output_dir=output_dir)
