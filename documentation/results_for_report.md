@@ -188,3 +188,46 @@ All three come from the held-out test set and were chosen by a fixed rule (writt
 - **Threshold tuned on training data.** The decision threshold is now chosen on out-of-fold training predictions instead of the default 0.5, and the test set is used once.
 - **Stability check added.** It shows the results hold across different splits.
 - **Real-time streaming remains out of scope**, as in the interim report (Scope vii). It goes under future work.
+
+---
+
+## 8. Explanation layer for analysts (design contribution)
+
+The dashboard translates the model's output into language an analyst can act on. The code is in `financial-fraud-detection/src/explanations.py`.
+
+**Risk levels** replace the raw yes/no decision:
+
+| Level | Rule | Suggested action |
+|---|---|---|
+| 🔴 High risk | score ≥ alert threshold (0.814) | Hold the transaction and contact the cardholder |
+| 🟡 Needs review | 0.5 ≤ score < 0.814 | Review manually before approving |
+| 🟢 Low risk | score < 0.5 | No action |
+
+- **Why 0.5 marks the review band.** 0.5 is the standard default decision point of a probabilistic classifier. It was fixed in advance, not tuned on the test set.
+- **Test-set result.** The review band contains 9 transactions, 2 of them fraud. In other words, an analyst checking 7 extra legitimate transactions recovers 2 of the 23 missed frauds.
+- **Limitation.** The other 21 missed frauds score far lower (19 score below 0.1). The model sees them as normal, so a review band cannot rescue them.
+- **Borderline warning.** Scores within ±0.05 of the alert threshold carry a note that the decision is close to the line.
+
+**Plain-language reasons.** Each of the top 5 SHAP factors becomes a sentence such as:
+
+> **V14 = −6.68** is extremely low: lower than 99.9% of normal transactions (normal range −1.42 to 1.39; frauds typically have about −6.75). This strongly raises the fraud score.
+
+How each part of the sentence is produced:
+
+- **The comparisons** use the training set only: percentiles of the 226,602 legitimate training transactions, and the median of the 378 training frauds.
+- **The strength words** come from |SHAP| in log-odds: ≥ 2 is "strongly", ≥ 0.5 is "moderately", otherwise "slightly".
+- **The reasons are phrased as comparisons with normal transactions** because V1–V28 are anonymised, so business meanings are not available.
+
+**Other aids:**
+
+- a simple red/blue bar chart of the top reasons, with the full SHAP waterfall available on request;
+- a "How to read this chart" note on every chart;
+- a plain-terms summary of model performance, e.g. "96 out of every 100 alerts are real fraud" and "catches about 3 in 4 frauds";
+- an integrity-check message in the Audit Log.
+
+**Suggested evaluation for the report.** Ask 3–5 people (ideally non-technical) to explain why a transaction was flagged:
+
+1. once using only the SHAP waterfall;
+2. once using the new verdict and reasons view.
+
+Record how long they take and whether their explanation is correct, plus a short rating of clarity from 1 to 5. Even a small test like this gives evidence that the explanation layer improves interpretability.

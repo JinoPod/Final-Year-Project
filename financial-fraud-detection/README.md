@@ -65,6 +65,11 @@ Then open http://localhost:8501. Pages:
 The dashboard shows only the primary XGBoost model. The baseline comparison is in
 `models/results/` and `documentation/results_for_report.md`.
 
+Every decision is shown as a risk level (🔴 High risk, 🟡 Needs review, 🟢 Low risk) with a
+suggested action and plain-language reasons (`src/explanations.py`). The reasons compare each
+value with normal training transactions using `models/models/feature_reference.json`, which is
+rebuilt automatically if missing (delete it after retraining).
+
 Try the upload page with `data/sample/sample_transactions.csv` (1,000 test transactions, 30 fraud).
 The audit log is stored in `logs/audit.db` (SQLite, append-only).
 

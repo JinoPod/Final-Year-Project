@@ -21,8 +21,13 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Import project modules
 from src.data.preprocess import preprocess_data
 from src.models.report_figures import unscale
-from src.inference import FraudScorer, prepare_upload, top_factors, MAX_ROWS, PRIMARY_MODEL
+from src.inference import FraudScorer, prepare_upload, MAX_ROWS, PRIMARY_MODEL
 from src.audit_log import AuditLog
+from src.explanations import (
+    load_reference, verdict, reasons, short_reasons, summary_sentence, risk_key, risk_label,
+    global_takeaways, fmt_prob, REVIEW_FLOOR, RISK_LEVELS
+)
+import plotly.graph_objects as go
 from src.visualization.visualization import (
     create_interactive_roc_curve, create_interactive_precision_recall_curve,
     create_interactive_confusion_matrix
@@ -59,6 +64,76 @@ def get_audit_log():
     return AuditLog(AUDIT_DB_PATH)
 
 
+@st.cache_resource
+def get_reference():
+    """Training-set summary used to phrase explanations (see src/explanations.py)."""
+    return load_reference(PROJECT_DIR)
+
+
+ANONYMISED_NOTE = (
+    "V1–V28 were anonymised by the data provider, so their business meaning (e.g. location or "
+    "merchant) is unknown. Reasons therefore compare each value with normal transactions from "
+    "the training data."
+)
+
+HOW_TO_READ = {
+    "reasons": (
+        "Each bar is one of the strongest factors behind this decision. **Red bars push towards "
+        "fraud, blue bars push towards legitimate.** A longer bar means a stronger influence. "
+        "The label shows the feature and its value in this transaction."
+    ),
+    "waterfall": (
+        "Read from the bottom up. The chart starts at the model's **average score** across all "
+        "transactions (E[f(X)], bottom). Each bar then adds (red) or subtracts (blue) one "
+        "feature's contribution, ending at **this transaction's score** (f(x), top). The grey "
+        "numbers on the left are the transaction's values.\n\n"
+        "Scores are on SHAP's internal *log-odds* scale: 0 means a 50% fraud score, +2 is about "
+        "88%, +4 is about 98%, −2 is about 12%."
+    ),
+    "lime": (
+        "LIME fits a simple model around this one transaction. Bars to the right support "
+        "**fraud**, bars to the left support **normal**. LIME is approximate and can disagree "
+        "with SHAP; SHAP is this system's primary explanation, and LIME is shown for comparison."
+    ),
+    "confusion": (
+        "Rows are what really happened; columns are what the model decided.\n"
+        "- **Top-left**: legitimate transactions correctly let through.\n"
+        "- **Bottom-right**: frauds caught.\n"
+        "- **Top-right**: false alarms (legitimate transactions flagged), i.e. wasted review time.\n"
+        "- **Bottom-left**: missed frauds, the most costly mistake."
+    ),
+    "roc": (
+        "Each point is a possible alert threshold: how many frauds are caught (up) against how "
+        "many legitimate transactions are wrongly flagged (right). A curve hugging the "
+        "**top-left corner** is good; the diagonal is random guessing. With so few frauds this "
+        "chart looks optimistic for almost any model, so read the precision-recall curve too."
+    ),
+    "pr": (
+        "Each point is a possible alert threshold. **Recall** (across) is the share of frauds "
+        "caught; **precision** (up) is the share of alerts that are real fraud. A curve near the "
+        "**top-right** is good. Moving the threshold trades one for the other: catching more "
+        "fraud means more false alarms."
+    ),
+    "shap_bar": (
+        "How much each feature influences the model's decisions **on average**, across every "
+        "test transaction. Longer bar = more influence. It does not show direction; the chart "
+        "on the right does."
+    ),
+    "beeswarm": (
+        "Each dot is one test transaction. Dots **right of the centre line** were pushed "
+        "towards fraud by that feature, dots on the left towards legitimate. Colour is the "
+        "feature's value: **red = high, blue = low**.\n\n"
+        "Example: for V14, blue dots sit far to the right, so **low V14 values push strongly "
+        "towards fraud**."
+    ),
+}
+
+
+def how_to_read(key):
+    with st.expander("ℹ️ How to read this chart"):
+        st.markdown(HOW_TO_READ[key])
+
+
 def plot_waterfall(shap_values, base_value, feature_values, feature_names, max_display=12):
     """SHAP waterfall from stored values (no model call needed)."""
     explanation = shap.Explanation(values=np.asarray(shap_values), base_values=base_value,
@@ -67,10 +142,73 @@ def plot_waterfall(shap_values, base_value, feature_values, feature_names, max_d
     fig = plt.gcf()
     st.pyplot(fig)
     plt.close(fig)
-    st.caption("Bars show how much each feature pushed this transaction towards fraud (red) or "
-               "legitimate (blue), in log-odds. E[f(x)] is the model's average output; f(x) is "
-               "this transaction's output before it is converted to a probability. Feature values "
-               "are shown as uploaded (Time and Amount unscaled).")
+
+
+def plot_reasons(reason_list):
+    """Simple horizontal bar chart of the strongest factors (red = towards fraud)."""
+    rs = list(reversed(reason_list))  # strongest at the top
+    labels = [f"{r['feature']} = {r['value']:,.2f}" for r in rs]
+    fig = go.Figure(go.Bar(
+        x=[r["shap"] for r in rs], y=labels, orientation="h",
+        marker_color=["#d62728" if r["raises_risk"] else "#1f77b4" for r in rs],
+        hovertext=[("raises" if r["raises_risk"] else "lowers") + f" risk ({r['strength']})" for r in rs],
+        hoverinfo="text",
+    ))
+    fig.add_vline(x=0, line_color="grey", line_width=1)
+    fig.update_layout(
+        height=60 + 45 * len(rs), margin=dict(l=10, r=10, t=10, b=40), showlegend=False,
+        xaxis=dict(title="← towards legitimate     towards fraud →", showticklabels=False,
+                   zeroline=False),
+    )
+    st.plotly_chart(fig, width="stretch")
+
+
+def risk_level_table(threshold):
+    """Markdown table explaining the three risk levels."""
+    rows = [
+        ("high", f"Score at or above the alert threshold ({threshold:.1%})"),
+        ("review", f"Score between {REVIEW_FLOOR:.0%} and the alert threshold: the model leans "
+                   "towards fraud but is not confident enough to raise an alert"),
+        ("low", f"Score below {REVIEW_FLOOR:.0%}"),
+    ]
+    lines = ["| Risk level | When | Suggested action |", "|---|---|---|"]
+    for key, when in rows:
+        lvl = RISK_LEVELS[key]
+        lines.append(f"| {lvl['icon']} **{lvl['label']}** | {when} | {lvl['action']} |")
+    return "\n".join(lines) + (
+        "\n\nThe **fraud score** is the model's estimated chance that a transaction is fraud. "
+        "The alert threshold was tuned on training data to balance catching fraud against "
+        "false alarms.")
+
+
+def show_explanation(probability, threshold, shap_row, values, feature_names, base_value,
+                     actual=None):
+    """Verdict, suggested action and plain-language reasons for one transaction."""
+    v = verdict(probability, threshold)
+    box = {"high": st.error, "review": st.warning, "low": st.success}[v["key"]]
+    box(f"#### {v['icon']} {v['label']}: {v['headline']}\n{v['detail']}\n\n"
+        f"**Suggested action:** {v['action']}")
+    if v["borderline"]:
+        st.info(f"⚠️ {v['borderline_note']}")
+    if actual is not None:
+        st.caption(f"Actual label in the data: **{'fraud' if actual == 1 else 'legitimate'}**.")
+
+    reason_list = reasons(shap_row, values, list(feature_names), get_reference())
+    st.markdown("#### Why")
+    st.markdown(summary_sentence(reason_list, probability, threshold))
+    col1, col2 = st.columns([3, 2])
+    with col1:
+        st.markdown("\n".join(f"{'🔺' if r['raises_risk'] else '🔻'} {r['sentence']}\n"
+                              for r in reason_list))
+    with col2:
+        plot_reasons(reason_list)
+        how_to_read("reasons")
+    st.caption(ANONYMISED_NOTE)
+
+    with st.expander("Detailed SHAP chart (all features, for technical review)"):
+        plot_waterfall(shap_row, base_value, values, feature_names)
+        st.markdown(HOW_TO_READ["waterfall"])
+    st.caption("Suggested actions are decision support only. The analyst makes the final decision.")
 
 # Function to load data
 @st.cache_data
@@ -130,34 +268,28 @@ def show_metrics(y_true, y_pred, y_pred_proba):
 
 
 def explain_transaction(X_test, feature_names, idx, proba, threshold):
-    """Decision, SHAP waterfall and LIME explanation for one test transaction."""
-    st.subheader("Prediction")
-    p = proba[idx]
-    if p >= threshold:
-        st.error(f"Flagged as fraud (fraud probability {p:.4f}, threshold {threshold:.4f})")
-    else:
-        st.success(f"Not flagged (fraud probability {p:.4f}, threshold {threshold:.4f})")
-
+    """Verdict, plain-language reasons and SHAP/LIME detail for one test transaction."""
     raw = unscale(X_test[idx:idx + 1], get_scorer().preprocessor, feature_names)[0]
-
-    st.subheader("SHAP Explanation")
     shap_values, base_value = test_shap_values()
-    plot_waterfall(shap_values[idx], base_value, raw, feature_names)
+    _, _, _, y_test, _ = load_data()
+    show_explanation(float(proba[idx]), threshold, shap_values[idx], raw, feature_names,
+                     base_value, actual=int(y_test[idx]))
 
-    st.subheader("LIME Explanation")
-    st.caption("LIME fits a simple local model around this transaction. It is shown for "
-               "comparison; SHAP is the primary explanation method.")
-    lime_explainer = lime.lime_tabular.LimeTabularExplainer(
-        X_test, feature_names=feature_names, class_names=["Normal", "Fraud"],
-        mode="classification", random_state=42)
-    lime_exp = lime_explainer.explain_instance(
-        X_test[idx], load_model()["model"].predict_proba, num_features=10)
-    fig = lime_exp.as_pyplot_figure()
-    st.pyplot(fig)
-    plt.close(fig)
+    if st.toggle("Compare with LIME (alternative explanation method)"):
+        lime_explainer = lime.lime_tabular.LimeTabularExplainer(
+            X_test, feature_names=feature_names, class_names=["Normal", "Fraud"],
+            mode="classification", random_state=42)
+        lime_exp = lime_explainer.explain_instance(
+            X_test[idx], load_model()["model"].predict_proba, num_features=10)
+        fig = lime_exp.as_pyplot_figure()
+        st.pyplot(fig)
+        plt.close(fig)
+        st.markdown(HOW_TO_READ["lime"])
+        st.caption("LIME works on the scaled values the model sees, so Time and Amount appear "
+                   "standardised here.")
 
-    st.subheader("Feature Values")
-    st.dataframe(pd.DataFrame({"Feature": feature_names, "Value": raw}))
+    with st.expander("All feature values for this transaction"):
+        st.dataframe(pd.DataFrame({"Feature": feature_names, "Value": raw}), hide_index=True)
 
 
 def page_upload():
@@ -215,47 +347,64 @@ def page_upload():
                 batch, source_file=uploaded.name, file_bytes=file_bytes,
                 total_rows=prepared.total_rows, rejected_rows=len(prepared.rejected))
             raw = batch.raw_features.to_numpy(dtype=float)
-            batch.results["top_factors"] = [
-                top_factors(batch.shap_values[i], raw[i], list(batch.raw_features.columns))
+            names = list(batch.raw_features.columns)
+            ref = get_reference()
+            batch.results["risk_level"] = [risk_label(p, batch.threshold)
+                                           for p in batch.results["fraud_probability"]]
+            batch.results["main_reasons"] = [
+                short_reasons(batch.shap_values[i], raw[i], names, ref)
                 for i in range(len(batch.results))
             ]
         cache[file_key] = (batch, batch_id)
     batch, batch_id = cache[file_key]
     results = batch.results
+    keys = np.array([risk_key(p, batch.threshold) for p in results["fraud_probability"]])
 
     st.success(f"Scored and saved to the audit log as batch #{batch_id}.")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Transactions in file", f"{prepared.total_rows:,}")
-    c2.metric("Scored", f"{len(results):,}")
-    c3.metric("Not scored", f"{len(prepared.rejected):,}")
-    c4.metric("Flagged as fraud", f"{int(results['flagged'].sum()):,}")
-    st.caption(f"Model: {batch.model_name} (trained {batch.model_version}); "
-               f"a transaction is flagged when its fraud probability is ≥ {batch.threshold:.4f}.")
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Transactions scored", f"{len(results):,}")
+    c2.metric("🔴 High risk", f"{int((keys == 'high').sum()):,}")
+    c3.metric("🟡 Needs review", f"{int((keys == 'review').sum()):,}")
+    c4.metric("🟢 Low risk", f"{int((keys == 'low').sum()):,}")
+    c5.metric("Not scored", f"{len(prepared.rejected):,}")
+    with st.expander("ℹ️ What do the risk levels mean?"):
+        st.markdown(risk_level_table(batch.threshold))
 
     if len(prepared.rejected):
         with st.expander(f"{len(prepared.rejected)} rows not scored"):
             st.dataframe(prepared.rejected, hide_index=True)
 
     if "actual" in results.columns:
-        actual_fraud = int(results["actual"].sum())
-        caught = int((results["flagged"] & (results["actual"] == 1)).sum())
-        false_alarms = int((results["flagged"] & (results["actual"] == 0)).sum())
-        st.info(f"The file is labelled: caught **{caught} of {actual_fraud}** frauds, "
-                f"with **{false_alarms}** false alarms.")
+        actual = results["actual"].to_numpy()
+        n_fraud = int(actual.sum())
+        caught = int(((keys == "high") & (actual == 1)).sum())
+        false_alarms = int(((keys == "high") & (actual == 0)).sum())
+        in_review = int(((keys == "review") & (actual == 1)).sum())
+        st.info(
+            f"This file has labels, so the decisions can be checked: **{caught} of {n_fraud}** "
+            f"frauds were marked High risk, with **{false_alarms}** false alarm"
+            f"{'' if false_alarms == 1 else 's'}."
+            + (f" Another **{in_review}** fraud{' was' if in_review == 1 else 's were'} marked "
+               "Needs review." if in_review else "")
+        )
 
     st.subheader("Results")
-    only_flagged = st.checkbox("Show only flagged transactions", value=bool(results["flagged"].any()))
-    shown = results[results["flagged"]] if only_flagged else results
+    show = st.radio("Show", ["High risk and Needs review", "All transactions"], horizontal=True,
+                    index=0 if (keys != "low").any() else 1)
+    shown = results[keys != "low"] if show.startswith("High") else results
     shown = shown.sort_values("fraud_probability", ascending=False)
+    columns = ["row", "risk_level", "fraud_probability", "main_reasons"] + \
+        (["actual"] if "actual" in results.columns else [])
     st.dataframe(
-        shown, hide_index=True, width="stretch",
+        shown[columns], hide_index=True, width="stretch",
         column_config={
             "row": st.column_config.NumberColumn("Row in file"),
+            "risk_level": st.column_config.TextColumn("Risk level"),
             "fraud_probability": st.column_config.ProgressColumn(
-                "Fraud probability", min_value=0.0, max_value=1.0, format="%.4f"),
-            "flagged": st.column_config.CheckboxColumn("Flagged"),
-            "actual": st.column_config.NumberColumn("Actual (Class)"),
-            "top_factors": st.column_config.TextColumn("Main reasons", width="large"),
+                "Fraud score", min_value=0.0, max_value=1.0, format="percent"),
+            "main_reasons": st.column_config.TextColumn(
+                "Main reasons (↑ raises risk, ↓ lowers risk)", width="large"),
+            "actual": st.column_config.NumberColumn("Actual (1 = fraud)"),
         },
     )
     st.download_button("Download results (CSV)", results.to_csv(index=False).encode(),
@@ -265,16 +414,15 @@ def page_upload():
     if shown.empty:
         st.info("No transactions to explain with the current filter.")
         return
-    row = st.selectbox("Row in file", shown["row"].tolist())
+    labels = dict(zip(shown["row"], shown["risk_level"] + "  ·  score " +
+                      shown["fraud_probability"].map(fmt_prob)))
+    row = st.selectbox("Transaction", shown["row"].tolist(),
+                       format_func=lambda r: f"Row {r}  ·  {labels[r]}")
     i = int(np.where(results["row"].to_numpy() == row)[0][0])
-    prob = float(results["fraud_probability"].iat[i])
-    if results["flagged"].iat[i]:
-        st.error(f"Flagged as fraud — probability {prob:.4f} (threshold {batch.threshold:.4f})")
-    else:
-        st.success(f"Not flagged — probability {prob:.4f} (threshold {batch.threshold:.4f})")
-    st.write(f"**Main reasons:** {results['top_factors'].iat[i]}")
-    plot_waterfall(batch.shap_values[i], batch.base_value,
-                   batch.raw_features.iloc[i].to_numpy(), batch.raw_features.columns)
+    show_explanation(float(results["fraud_probability"].iat[i]), batch.threshold,
+                     batch.shap_values[i], batch.raw_features.iloc[i].to_numpy(dtype=float),
+                     batch.raw_features.columns, batch.base_value,
+                     actual=int(results["actual"].iat[i]) if "actual" in results.columns else None)
 
 
 def page_audit():
@@ -302,44 +450,56 @@ def page_audit():
     c1, c2 = st.columns([2, 1])
     batch_choice = c1.selectbox(
         "Batch", ["All batches"] + [f"#{b} — {f}" for b, f in zip(batches["id"], batches["source_file"])])
-    flagged_only = c2.checkbox("Flagged only", value=True)
+    show = c2.selectbox("Show", ["High risk and Needs review", "High risk only", "All decisions"])
     batch_id = None if batch_choice == "All batches" else int(batch_choice.split()[0][1:])
-    decisions = log.get_decisions(batch_id=batch_id, flagged_only=flagged_only, limit=5000)
+    decisions = log.get_decisions(batch_id=batch_id, limit=20_000)
+    keys = np.array([risk_key(p, t) for p, t in zip(decisions["fraud_probability"],
+                                                    decisions["threshold"])])
+    decisions["risk_level"] = [risk_label(p, t) for p, t in zip(decisions["fraud_probability"],
+                                                                decisions["threshold"])]
+    if show == "High risk only":
+        decisions = decisions[keys == "high"]
+    elif show.startswith("High risk and"):
+        decisions = decisions[keys != "low"]
     if decisions.empty:
         st.info("No decisions match this filter.")
         return
     st.dataframe(
-        decisions.drop(columns=["input_sha256"]), hide_index=True, width="stretch",
+        decisions[["id", "batch_id", "created_at", "source_file", "row_number", "risk_level",
+                   "fraud_probability", "actual", "top_factors"]],
+        hide_index=True, width="stretch",
         column_config={
             "id": "Decision", "batch_id": "Batch", "created_at": "Logged at (UTC)",
-            "row_number": "Row in file",
-            "fraud_probability": st.column_config.NumberColumn("Fraud probability", format="%.4f"),
-            "top_factors": st.column_config.TextColumn("Main reasons", width="large"),
+            "source_file": "File", "row_number": "Row in file", "risk_level": "Risk level",
+            "fraud_probability": st.column_config.ProgressColumn(
+                "Fraud score", min_value=0.0, max_value=1.0, format="percent"),
+            "actual": st.column_config.NumberColumn("Actual (1 = fraud)"),
+            "top_factors": st.column_config.TextColumn("Main factors (as logged)", width="large"),
         },
     )
     st.download_button("Download decision log (CSV)", decisions.to_csv(index=False).encode(),
                        file_name="decision_log.csv", mime="text/csv")
 
     st.subheader("Review a decision")
-    decision_id = st.selectbox("Decision", decisions["id"].tolist())
+    labels = dict(zip(decisions["id"], decisions["risk_level"] + "  ·  score " +
+                      decisions["fraud_probability"].map(fmt_prob)))
+    decision_id = st.selectbox("Decision", decisions["id"].tolist(),
+                               format_func=lambda i: f"#{i}  ·  {labels[i]}")
     d = log.get_decision(decision_id)
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Fraud probability", f"{d['fraud_probability']:.4f}")
-    c2.metric("Decision", "Fraud" if d["flagged"] else "Legitimate")
-    c3.metric("Threshold", f"{d['threshold']:.4f}")
     st.markdown(
         f"- **Logged:** {d['created_at']} UTC, batch #{d['batch_id']}, row {d['row_number']} "
         f"of `{d['source_file']}`\n"
-        f"- **Model:** {d['model_name']} (trained {d['model_version']})\n"
-        + (f"- **Actual label in file:** {'fraud' if d['actual'] == 1 else 'legitimate'}\n"
-           if d["actual"] is not None else "")
-        + f"- **Main reasons:** {d['top_factors']}"
+        f"- **Model:** {d['model_name']} (trained {d['model_version']}), alert threshold "
+        f"{d['threshold']:.4f}"
     )
     if d["hash_ok"]:
-        st.caption(f"Input integrity check passed (SHA-256 {d['input_sha256'][:16]}…).")
+        st.caption(f"✅ Integrity check passed: the stored inputs match their SHA-256 fingerprint "
+                   f"({d['input_sha256'][:16]}…), so this record has not been altered.")
     else:
-        st.error("Input integrity check FAILED: the stored input does not match its hash.")
-    plot_waterfall(d["shap_values"], d["base_value"], d["features"], d["feature_names"])
+        st.error("Integrity check FAILED: the stored inputs do not match their fingerprint. "
+                 "This record may have been altered.")
+    show_explanation(d["fraud_probability"], d["threshold"], d["shap_values"], d["features"],
+                     d["feature_names"], d["base_value"], actual=d["actual"])
 
 
 # Main function
@@ -385,6 +545,9 @@ def main():
             **Audit**: every uploaded decision is logged with its SHAP explanation
             """)
 
+        st.subheader("Risk levels")
+        st.markdown(risk_level_table(float(load_model()["metadata"]["threshold"])))
+
         X_train, X_test, y_train, y_test, _ = load_data()
         st.subheader("Data Overview")
         col1, col2, col3 = st.columns(3)
@@ -415,23 +578,64 @@ def main():
                    "or tuning).")
         _, X_test, _, y_test, feature_names = load_data()
         y_pred, y_pred_proba, threshold = test_predictions()
-        st.info(f"Decision threshold: {threshold:.4f} (tuned on the training data)")
+
+        st.subheader("In plain terms")
+        y = y_test.astype(int)
+        tp = int(((y_pred == 1) & (y == 1)).sum())
+        fp = int(((y_pred == 1) & (y == 0)).sum())
+        n_fraud, n_legit = int(y.sum()), int((y == 0).sum())
+        review = (y_pred_proba >= REVIEW_FLOOR) & (y_pred == 0)
+        review_fraud = int((review & (y == 1)).sum())
+        st.markdown(
+            f"- ✅ **{tp / (tp + fp) * 100:.0f} out of every 100 alerts are real fraud** "
+            f"({tp} of {tp + fp} alerts).\n"
+            f"- 🎯 **The model catches about {round(tp / n_fraud * 4)} in 4 frauds** "
+            f"({tp} of {n_fraud}, {tp / n_fraud:.0%}).\n"
+            f"- 🔕 **False alarms are rare: about 1 in {round(n_legit / max(fp, 1), -3):,.0f} legitimate "
+            f"transactions** is wrongly flagged ({fp} of {n_legit:,}).\n"
+            f"- 🟡 A further {int(review.sum())} transactions fall in the *Needs review* band; "
+            f"{review_fraud} of them {'is' if review_fraud == 1 else 'are'} fraud.\n"
+            f"- ⚠️ **Weak point:** about {round((n_fraud - tp) / n_fraud * 4)} in 4 frauds look "
+            "like normal transactions to the model and are missed."
+        )
 
         st.subheader("Performance Metrics")
         show_metrics(y_test, y_pred, y_pred_proba)
+        with st.expander("ℹ️ What do these metrics mean?"):
+            st.markdown(
+                "- **Precision**: of the transactions flagged, the share that really were fraud. "
+                "High precision means few false alarms.\n"
+                "- **Recall**: of all the real frauds, the share the model caught.\n"
+                "- **F1 score**: one number balancing precision and recall (1.0 is perfect).\n"
+                "- **ROC-AUC**: how well the model ranks frauds above legitimate transactions "
+                "overall (1.0 is perfect, 0.5 is guessing).\n"
+                "- **Accuracy** is shown for completeness but is misleading here: only 0.17% of "
+                "transactions are fraud, so a model that never flags anything would still score "
+                "99.8%."
+            )
+        st.caption(f"Alert threshold: {threshold:.4f}, tuned on the training data.")
 
         st.subheader("Confusion Matrix")
-        st.plotly_chart(create_interactive_confusion_matrix(y_test, y_pred, "XGBoost"))
+        col1, col2 = st.columns([3, 2])
+        with col1:
+            st.plotly_chart(create_interactive_confusion_matrix(y_test, y_pred, "XGBoost"))
+        with col2:
+            st.markdown(HOW_TO_READ["confusion"])
 
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("ROC Curve")
             st.plotly_chart(create_interactive_roc_curve(y_test, y_pred_proba, "XGBoost"))
+            how_to_read("roc")
         with col2:
             st.subheader("Precision-Recall Curve")
             st.plotly_chart(create_interactive_precision_recall_curve(y_test, y_pred_proba, "XGBoost"))
+            how_to_read("pr")
 
         st.subheader("Global Explanation (SHAP)")
+        st.info("**Key takeaways**\n\n" + "\n".join(f"- {line}" for line in
+                                                     global_takeaways(get_reference())))
+        st.caption(ANONYMISED_NOTE)
         shap_values, base_value = test_shap_values()
         raw = unscale(X_test, get_scorer().preprocessor, feature_names)
         exp = shap.Explanation(values=shap_values, base_values=np.full(len(shap_values), base_value),
@@ -441,13 +645,12 @@ def main():
             shap.plots.bar(exp, max_display=15, show=False)
             st.pyplot(plt.gcf())
             plt.close("all")
-            st.caption("Average impact of each feature on the model's output across the test set.")
+            how_to_read("shap_bar")
         with col2:
             shap.plots.beeswarm(exp, max_display=15, show=False)
             st.pyplot(plt.gcf())
             plt.close("all")
-            st.caption("Each dot is one transaction. Position shows whether the feature pushed it "
-                       "towards fraud (right) or legitimate (left); colour shows the feature value.")
+            how_to_read("beeswarm")
 
     elif page == "Transaction Explanation":
         st.title("Transaction Explanation")
