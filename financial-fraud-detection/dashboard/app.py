@@ -27,16 +27,13 @@ from src.explanations import (
     load_reference, verdict, reasons, short_reasons, summary_sentence, risk_key, risk_label,
     global_takeaways, fmt_prob, REVIEW_FLOOR, RISK_LEVELS
 )
-import plotly.graph_objects as go
-from src.visualization.visualization import (
-    create_interactive_roc_curve, create_interactive_precision_recall_curve,
-    create_interactive_confusion_matrix
-)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import theme  # noqa: E402  (dashboard/theme.py)
 
 # Set page config
 st.set_page_config(
-    page_title="Financial Fraud Detection Dashboard",
-    page_icon="💰",
+    page_title="Fraud Detection · XAI",
+    page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -145,22 +142,8 @@ def plot_waterfall(shap_values, base_value, feature_values, feature_names, max_d
 
 
 def plot_reasons(reason_list):
-    """Simple horizontal bar chart of the strongest factors (red = towards fraud)."""
-    rs = list(reversed(reason_list))  # strongest at the top
-    labels = [f"{r['feature']} = {r['value']:,.2f}" for r in rs]
-    fig = go.Figure(go.Bar(
-        x=[r["shap"] for r in rs], y=labels, orientation="h",
-        marker_color=["#d62728" if r["raises_risk"] else "#1f77b4" for r in rs],
-        hovertext=[("raises" if r["raises_risk"] else "lowers") + f" risk ({r['strength']})" for r in rs],
-        hoverinfo="text",
-    ))
-    fig.add_vline(x=0, line_color="grey", line_width=1)
-    fig.update_layout(
-        height=60 + 45 * len(rs), margin=dict(l=10, r=10, t=10, b=40), showlegend=False,
-        xaxis=dict(title="← towards legitimate     towards fraud →", showticklabels=False,
-                   zeroline=False),
-    )
-    st.plotly_chart(fig, width="stretch")
+    """Simple horizontal bar chart of the strongest factors (crimson = towards fraud)."""
+    st.plotly_chart(theme.reasons_chart(reason_list), width="stretch", theme=None)
 
 
 def risk_level_table(threshold):
@@ -185,9 +168,7 @@ def show_explanation(probability, threshold, shap_row, values, feature_names, ba
                      actual=None):
     """Verdict, suggested action and plain-language reasons for one transaction."""
     v = verdict(probability, threshold)
-    box = {"high": st.error, "review": st.warning, "low": st.success}[v["key"]]
-    box(f"#### {v['icon']} {v['label']}: {v['headline']}\n{v['detail']}\n\n"
-        f"**Suggested action:** {v['action']}")
+    theme.verdict_card(v, probability, threshold, REVIEW_FLOOR, fmt_prob(probability))
     if v["borderline"]:
         st.info(f"⚠️ {v['borderline_note']}")
     if actual is not None:
@@ -257,6 +238,30 @@ def test_shap_values():
     return sv.values, float(np.ravel(sv.base_values)[0])
 
 
+@st.cache_data(show_spinner="Drawing the global SHAP charts...")
+def global_shap_images():
+    """Global SHAP bar and beeswarm charts as PNG bytes (drawn once: the beeswarm has ~850k points)."""
+    _, X_test, _, _, feature_names = load_data()
+    shap_values, base_value = test_shap_values()
+    raw = unscale(X_test, get_scorer().preprocessor, feature_names)
+    exp = shap.Explanation(values=shap_values, base_values=np.full(len(shap_values), base_value),
+                           data=raw, feature_names=feature_names)
+    images = []
+    for kind in ("bar", "beeswarm"):
+        plt.figure()
+        if kind == "bar":
+            # Importance is a magnitude, not a direction, so it uses one neutral colour.
+            with shap.plots._style.style_context(primary_color_positive=theme.BLUE):
+                shap.plots.bar(exp, max_display=15, show=False)
+        else:
+            shap.plots.beeswarm(exp, max_display=15, show=False, color=theme.SHAP_CMAP)
+        buf = io.BytesIO()
+        plt.gcf().savefig(buf, format="png", dpi=130, bbox_inches="tight")
+        plt.close("all")
+        images.append(buf.getvalue())
+    return images
+
+
 def show_metrics(y_true, y_pred, y_pred_proba):
     from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
     cols = st.columns(5)
@@ -281,7 +286,7 @@ def explain_transaction(X_test, feature_names, idx, proba, threshold):
             mode="classification", random_state=42)
         lime_exp = lime_explainer.explain_instance(
             X_test[idx], load_model()["model"].predict_proba, num_features=10)
-        fig = lime_exp.as_pyplot_figure()
+        fig = theme.recolor_lime(lime_exp.as_pyplot_figure())
         st.pyplot(fig)
         plt.close(fig)
         st.markdown(HOW_TO_READ["lime"])
@@ -502,69 +507,76 @@ def page_audit():
                      d["feature_names"], d["base_value"], actual=d["actual"])
 
 
+PAGE_ICONS = {"Home": "🏠", "Upload & Score": "📤", "Audit Log": "🗂️",
+              "Model Performance": "📊", "Transaction Explanation": "🔍"}
+
+
 # Main function
 def main():
     """Main function for the dashboard."""
-    st.sidebar.title("Financial Fraud Detection")
-    page = st.sidebar.selectbox(
-        "Navigation",
-        ["Home", "Upload & Score", "Audit Log", "Model Performance", "Transaction Explanation"]
+    theme.apply_theme()
+    theme.sidebar_brand()
+    pages = list(PAGE_ICONS)
+    requested = st.query_params.get("page", "Home")  # e.g. ?page=Audit Log opens that page
+    page = st.sidebar.radio(
+        "Navigation", pages, index=pages.index(requested) if requested in pages else 0,
+        format_func=lambda p: PAGE_ICONS[p] + "  " + p,
     )
+    threshold = float(load_model()["metadata"]["threshold"])
+    st.sidebar.markdown("---")
+    st.sidebar.caption(f"Model: XGBoost, trained {str(load_model().get('timestamp', 'unknown'))[:10]}  \n"
+                       f"Alert threshold: {threshold:.3f}  \n"
+                       f"Review band starts at: {REVIEW_FLOOR:.2f}")
 
     if page == "Home":
-        st.title("Financial Fraud Detection Dashboard")
-        st.write("""
-        This dashboard detects fraudulent credit card transactions with a tuned XGBoost model
-        and explains every decision with SHAP.
+        theme.hero(
+            "Explainable Fraud Detection",
+            "Scores credit card transactions with a tuned <span class='accent'>XGBoost</span> "
+            "model and explains every decision with <span class='accent'>SHAP</span>, in plain "
+            "language an analyst can act on. Every decision is kept in a tamper-evident audit log.")
 
-        ### Pages:
-        - **Upload & Score**: Upload a CSV of transactions, get fraud decisions and a SHAP explanation for each
-        - **Audit Log**: Review past decisions and their stored explanations
-        - **Model Performance**: How well the model performs on the held-out test set
-        - **Transaction Explanation**: Understand why a test-set transaction was or was not flagged
-        """)
-
-        st.subheader("Project Information")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.info("""
-            **Dataset**: European Credit Card Fraud (Kaggle / ULB), 284,807 transactions,
-            0.17% fraud; features Time, Amount and PCA components V1-V28
-
-            **Model**: XGBoost, tuned with Optuna
-
-            **Explainability**: SHAP (exact TreeSHAP), with LIME for comparison
-            """)
-        with col2:
-            st.info("""
-            **Imbalance handling**: SMOTE on the training data only
-
-            **Decision threshold**: tuned for F1 with cross-validation on the training
-            data; the test set is used only for the final evaluation
-
-            **Audit**: every uploaded decision is logged with its SHAP explanation
-            """)
+        cards = [
+            ("📤", "Upload & Score", "Upload a CSV of transactions. Each one gets a risk level, "
+                                    "a suggested action and the reasons behind it."),
+            ("🗂️", "Audit Log", "Review any past decision with the explanation stored at the time, "
+                               "and confirm the record has not been altered."),
+            ("📊", "Model Performance", "How well the model does on 56,746 transactions it never "
+                                       "saw during training, in plain terms."),
+            ("🔍", "Transaction Explanation", "Explore caught frauds, false alarms and missed frauds "
+                                             "from the test set and see why each happened."),
+        ]
+        cols = st.columns(4)
+        for col, (icon, title, text) in zip(cols, cards):
+            with col.container(border=True):
+                st.markdown(f"##### {icon} {title}")
+                st.caption(text)
 
         st.subheader("Risk levels")
-        st.markdown(risk_level_table(float(load_model()["metadata"]["threshold"])))
+        st.markdown(risk_level_table(threshold))
 
         X_train, X_test, y_train, y_test, _ = load_data()
-        st.subheader("Data Overview")
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Training Samples", f"{X_train.shape[0]:,}")
-        col2.metric("Test Samples", f"{X_test.shape[0]:,}")
-        col3.metric("Features", f"{X_train.shape[1]:,}")
+        st.subheader("The data")
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Training transactions", f"{X_train.shape[0]:,}",
+                    f"{int(y_train.sum())} fraud", delta_color="off", delta_arrow="off")
+        col2.metric("Test transactions", f"{X_test.shape[0]:,}",
+                    f"{int(y_test.sum())} fraud", delta_color="off", delta_arrow="off")
+        col3.metric("Share that is fraud", f"{(y_train.sum() + y_test.sum()) / (len(y_train) + len(y_test)):.2%}",
+                    "about 1 in 600", delta_color="off", delta_arrow="off")
+        col4.metric("Features per transaction", f"{X_train.shape[1]}",
+                    "Time, Amount, V1–V28", delta_color="off", delta_arrow="off")
 
-        st.subheader("Class Distribution")
-        fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-        for a, y, title in ((ax[0], y_train, "Training Set"), (ax[1], y_test, "Test Set")):
-            counts = np.bincount(y.astype(int))
-            a.bar(["Normal", "Fraud"], counts)
-            a.set_title(title)
-            for i, count in enumerate(counts):
-                a.text(i, count + 10, f"{count:,}", ha="center")
-        st.pyplot(fig)
-        plt.close(fig)
+        with st.expander("How the model was built"):
+            st.markdown(
+                "- **Dataset:** European Credit Card Fraud (Kaggle / ULB), 284,807 transactions; "
+                "1,081 duplicates removed. V1–V28 are PCA components anonymised by the provider.\n"
+                "- **Model:** XGBoost, tuned with Optuna using 3-fold cross-validation.\n"
+                "- **Imbalance:** SMOTE, applied only to training folds.\n"
+                "- **Alert threshold:** tuned for F1 on training data; the test set was used once, "
+                "for the final evaluation.\n"
+                "- **Explanations:** exact TreeSHAP, with LIME available for comparison.\n"
+                "- **Audit:** every uploaded decision is stored with its explanation and a SHA-256 "
+                "fingerprint of its inputs.")
 
     elif page == "Upload & Score":
         page_upload()
@@ -583,21 +595,22 @@ def main():
         y = y_test.astype(int)
         tp = int(((y_pred == 1) & (y == 1)).sum())
         fp = int(((y_pred == 1) & (y == 0)).sum())
+        fn = int(((y_pred == 0) & (y == 1)).sum())
+        tn = int(((y_pred == 0) & (y == 0)).sum())
         n_fraud, n_legit = int(y.sum()), int((y == 0).sum())
         review = (y_pred_proba >= REVIEW_FLOOR) & (y_pred == 0)
         review_fraud = int((review & (y == 1)).sum())
-        st.markdown(
-            f"- ✅ **{tp / (tp + fp) * 100:.0f} out of every 100 alerts are real fraud** "
-            f"({tp} of {tp + fp} alerts).\n"
-            f"- 🎯 **The model catches about {round(tp / n_fraud * 4)} in 4 frauds** "
-            f"({tp} of {n_fraud}, {tp / n_fraud:.0%}).\n"
-            f"- 🔕 **False alarms are rare: about 1 in {round(n_legit / max(fp, 1), -3):,.0f} legitimate "
-            f"transactions** is wrongly flagged ({fp} of {n_legit:,}).\n"
-            f"- 🟡 A further {int(review.sum())} transactions fall in the *Needs review* band; "
-            f"{review_fraud} of them {'is' if review_fraud == 1 else 'are'} fraud.\n"
-            f"- ⚠️ **Weak point:** about {round((n_fraud - tp) / n_fraud * 4)} in 4 frauds look "
-            "like normal transactions to the model and are missed."
-        )
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("✅ Alerts that are real fraud", f"{tp / (tp + fp) * 100:.0f} in 100",
+                  f"{tp} of {tp + fp} alerts", delta_color="off", delta_arrow="off")
+        c2.metric("🎯 Frauds caught", f"about {round(tp / n_fraud * 4)} in 4",
+                  f"{tp} of {n_fraud} ({tp / n_fraud:.0%})", delta_color="off", delta_arrow="off")
+        c3.metric("🔕 False alarm rate", f"1 in {round(n_legit / max(fp, 1), -3):,.0f}",
+                  f"{fp} of {n_legit:,} legitimate", delta_color="off", delta_arrow="off")
+        c4.metric("🟡 Sent for review", f"{int(review.sum())}",
+                  f"{review_fraud} of them fraud", delta_color="off", delta_arrow="off")
+        st.caption(f"⚠️ Weak point: about {round(fn / n_fraud * 4)} in 4 frauds look like normal "
+                   "transactions to the model and are missed.")
 
         st.subheader("Performance Metrics")
         show_metrics(y_test, y_pred, y_pred_proba)
@@ -618,38 +631,31 @@ def main():
         st.subheader("Confusion Matrix")
         col1, col2 = st.columns([3, 2])
         with col1:
-            st.plotly_chart(create_interactive_confusion_matrix(y_test, y_pred, "XGBoost"))
+            theme.confusion_grid(tn, fp, fn, tp)
         with col2:
             st.markdown(HOW_TO_READ["confusion"])
 
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("ROC Curve")
-            st.plotly_chart(create_interactive_roc_curve(y_test, y_pred_proba, "XGBoost"))
+            st.plotly_chart(theme.roc_chart(y, y_pred_proba, threshold), width="stretch", theme=None)
             how_to_read("roc")
         with col2:
             st.subheader("Precision-Recall Curve")
-            st.plotly_chart(create_interactive_precision_recall_curve(y_test, y_pred_proba, "XGBoost"))
+            st.plotly_chart(theme.pr_chart(y, y_pred_proba, threshold), width="stretch", theme=None)
             how_to_read("pr")
 
         st.subheader("Global Explanation (SHAP)")
         st.info("**Key takeaways**\n\n" + "\n".join(f"- {line}" for line in
                                                      global_takeaways(get_reference())))
         st.caption(ANONYMISED_NOTE)
-        shap_values, base_value = test_shap_values()
-        raw = unscale(X_test, get_scorer().preprocessor, feature_names)
-        exp = shap.Explanation(values=shap_values, base_values=np.full(len(shap_values), base_value),
-                               data=raw, feature_names=feature_names)
+        bar_png, beeswarm_png = global_shap_images()
         col1, col2 = st.columns(2)
         with col1:
-            shap.plots.bar(exp, max_display=15, show=False)
-            st.pyplot(plt.gcf())
-            plt.close("all")
+            st.image(bar_png, width="stretch")
             how_to_read("shap_bar")
         with col2:
-            shap.plots.beeswarm(exp, max_display=15, show=False)
-            st.pyplot(plt.gcf())
-            plt.close("all")
+            st.image(beeswarm_png, width="stretch")
             how_to_read("beeswarm")
 
     elif page == "Transaction Explanation":
