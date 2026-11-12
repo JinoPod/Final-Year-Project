@@ -261,6 +261,41 @@ def summary_sentence(reason_list, probability, threshold):
             f"led by {lead['feature']}{lead_desc}.")
 
 
+def _influence(rank):
+    if rank <= 5:
+        return "Very high"
+    if rank <= 10:
+        return "High"
+    if rank <= 20:
+        return "Moderate"
+    return "Low"
+
+
+def feature_guide(reference):
+    """One row per feature, in order of influence, describing what the training data shows.
+
+    Influence comes from the model (mean |SHAP| rank); the ranges and the typical fraud value
+    come straight from the training data. No business meaning is implied for V1-V28.
+    """
+    i5, i95 = PERCENTILES.index(5), PERCENTILES.index(95)
+    rows = []
+    for name, ref in sorted(reference["features"].items(), key=lambda kv: kv[1]["importance_rank"]):
+        lo, hi = ref["normal_percentiles"][i5], ref["normal_percentiles"][i95]
+        if ref["fraud_direction"] < 0:
+            pattern = "Low values point to fraud"
+        elif ref["fraud_direction"] > 0:
+            pattern = "High values point to fraud"
+        else:
+            pattern = "No simple high/low pattern"
+        rows.append({
+            "feature": name, "rank": ref["importance_rank"], "influence": _influence(ref["importance_rank"]),
+            "normal_low": lo, "normal_high": hi, "fraud_median": ref["fraud_median"],
+            "normal_range": f"{_fmt(name, lo)} to {_fmt(name, hi)}",
+            "typical_fraud": _fmt(name, ref["fraud_median"]), "pattern": pattern,
+        })
+    return rows
+
+
 def global_takeaways(reference, n=5):
     """Plain-language summary of what drives the model overall."""
     top = sorted(reference["features"].items(), key=lambda kv: kv[1]["importance_rank"])[:n]

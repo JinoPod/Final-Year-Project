@@ -25,7 +25,7 @@ from src.inference import FraudScorer, prepare_upload, MAX_ROWS, PRIMARY_MODEL
 from src.audit_log import AuditLog, list_archives, start_fresh_log
 from src.explanations import (
     load_reference, verdict, reasons, short_reasons, summary_sentence, risk_key, risk_label,
-    global_takeaways, fmt_prob, REVIEW_FLOOR, RISK_LEVELS
+    global_takeaways, feature_guide, fmt_prob, REVIEW_FLOOR, RISK_LEVELS
 )
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import theme  # noqa: E402  (dashboard/theme.py)
@@ -123,12 +123,54 @@ HOW_TO_READ = {
         "Example: for V14, blue dots sit far to the right, so **low V14 values push strongly "
         "towards fraud**."
     ),
+    "feature_guide": (
+        "Each row is one feature, most influential at the top. The **blue band** is where the "
+        "middle 90% of normal (legitimate) transactions fall. The **red dot** is the typical "
+        "(median) value among frauds.\n\n"
+        "A red dot far outside the band means frauds usually look very different on that "
+        "feature, e.g. V14: normal transactions sit between about -1.4 and 1.4, while a typical "
+        "fraud is around -6.8. A red dot inside the band (e.g. V8) means the feature still "
+        "matters to the model, but not through a simple high/low rule."
+    ),
 }
 
 
 def how_to_read(key):
     with st.expander("How to read this chart", icon=":material/info:"):
         st.markdown(HOW_TO_READ[key])
+
+
+def feature_guide_section():
+    """Model Performance: what the data shows about each (anonymised) feature."""
+    st.subheader("Feature guide")
+    st.markdown(
+        "V1–V28 have no published meaning, so this guide describes **how each feature behaves in "
+        "the training data** instead: how much the model relies on it, where normal transactions "
+        "fall, and where frauds typically fall. Use it to recognise warning signs, e.g. "
+        "*\"very low V14\"*, when reading an explanation.")
+    rows = feature_guide(get_reference())
+    st.plotly_chart(theme.feature_guide_chart(rows, top=12), width="stretch", theme=None)
+    how_to_read("feature_guide")
+    with st.expander("All 30 features", icon=":material/table_rows:"):
+        table = pd.DataFrame(rows)[["rank", "feature", "influence", "normal_range",
+                                    "typical_fraud", "pattern"]]
+        st.dataframe(table, hide_index=True, width="stretch", height="content", column_config={
+            "rank": st.column_config.NumberColumn("Rank", help="1 = the feature the model relies on most "
+                                                  "(mean absolute SHAP value)"),
+            "feature": "Feature",
+            "influence": "Influence on the model",
+            "normal_range": st.column_config.TextColumn(
+                "Normal range", width=fit_width(table["normal_range"], minimum=140),
+                help="Middle 90% of legitimate training transactions (5th to 95th percentile)"),
+            "typical_fraud": st.column_config.TextColumn(
+                "Typical fraud", help="Median value among fraudulent training transactions"),
+            "pattern": st.column_config.TextColumn("What the data shows", width=fit_width(table["pattern"])),
+        })
+    ref = get_reference()
+    st.caption(
+        f"Ranges and typical values come from the training data only ({ref['n_normal']:,} legitimate "
+        f"and {ref['n_fraud']:,} fraudulent transactions); influence comes from SHAP. These are "
+        "tendencies, not rules: a fraud can still have normal values, which is how frauds get missed.")
 
 
 def plot_waterfall(shap_values, base_value, feature_values, feature_names, max_display=12):
@@ -806,6 +848,7 @@ def main():
         with col2:
             st.image(beeswarm_png, width="stretch")
             how_to_read("beeswarm")
+        feature_guide_section()
 
     elif page == "Transaction Explanation":
         st.title("Transaction Explanation")

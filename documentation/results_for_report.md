@@ -225,6 +225,24 @@ How each part of the sentence is produced:
 - a plain-terms summary of model performance, e.g. "96 out of every 100 alerts are real fraud" and "catches about 3 in 4 frauds";
 - an integrity-check message in the Audit Log.
 
+**Feature guide (Model Performance page).** This is how the dashboard handles the anonymised features honestly. It doesn't invent names for V1–V28. Instead, for every feature it describes what the training data shows:
+
+- its influence rank (mean |SHAP|);
+- its normal range (the 5th–95th percentile of legitimate transactions);
+- the typical fraud value (the median of the frauds);
+- a pattern label: "Low values point to fraud", "High values point to fraud" or "No simple high/low pattern".
+
+A chart shows the 12 most influential V features, each as a normal-range band with a dot for the typical fraud value. Examples:
+
+| Feature | Rank | Normal range | Typical fraud | What the data shows |
+|---|---|---|---|---|
+| V14 | 1 | −1.42 to 1.39 | −6.75 | Low values point to fraud |
+| V4 | 2 | −2.20 to 2.53 | 4.03 | High values point to fraud |
+| V8 | 4 | −0.84 to 1.04 | 0.60 | No simple high/low pattern |
+
+- **Point for the discussion.** Some features separate fraud strongly in the raw data, yet the model barely uses them: V16 (rank 28) has a typical fraud value of −3.55 against a normal range of −1.48 to 1.33, and V7 (rank 29) has −2.94 against −1.42 to 1.41. A likely reason is that they carry information the model already gets from V14, V12 and V10, so tree splits favour those. The data alone doesn't confirm this. It shows that SHAP importance means *how much this model relies on a feature*, not *how different frauds look on it*. Distinguishing the two is a useful XAI point.
+- **For future work.** With a dataset that has named features (e.g. IEEE-CIS), the same guide would describe real factors such as device or transaction type, giving explanations business meaning as well as faithfulness.
+
 **Suggested evaluation for the report.** Ask 3–5 people (ideally non-technical) to explain why a transaction was flagged:
 
 1. once using only the SHAP waterfall;

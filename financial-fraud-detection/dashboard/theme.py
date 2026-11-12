@@ -380,6 +380,41 @@ def reasons_chart(reason_list):
     return fig
 
 
+def feature_guide_chart(rows, top=12):
+    """Normal range (blue band, middle 90% of legitimate transactions) and the typical fraud
+    value (crimson dot) for the most influential V features, most influential at the top.
+    Time and Amount are left out: their scales (seconds, euros) would flatten the V features."""
+    rs = [r for r in rows if r["feature"].startswith("V")][:top][::-1]
+    labels = [f"{r['feature']}  ·  #{r['rank']}" for r in rs]
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        name="Normal transactions (middle 90%)", y=labels, orientation="h",
+        base=[r["normal_low"] for r in rs], x=[r["normal_high"] - r["normal_low"] for r in rs],
+        marker=dict(color="rgba(46, 100, 160, 0.30)", line=dict(color=BLUE, width=1.5), cornerradius=4),
+        width=0.5,
+        customdata=[[r["normal_range"], r["influence"]] for r in rs],
+        hovertemplate="<b>%{y}</b><br>Normal range: %{customdata[0]}<br>"
+                      "Influence: %{customdata[1]}<extra></extra>"))
+    fig.add_trace(go.Scatter(
+        name="Typical fraud (median)", y=labels, x=[r["fraud_median"] for r in rs], mode="markers",
+        marker=dict(size=13, color=CRIMSON, line=dict(color=CREME, width=2)),
+        customdata=[[r["typical_fraud"], r["pattern"]] for r in rs],
+        hovertemplate="<b>%{y}</b><br>Typical fraud: %{customdata[0]}<br>"
+                      "%{customdata[1]}<extra></extra>"))
+    fig.add_vline(x=0, line_color=BORDER, line_width=1)
+    fig.update_layout(
+        height=110 + 38 * len(rs), margin=dict(l=110, r=20, t=50, b=50),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=INK, family="sans-serif", size=15),
+        hoverlabel=dict(bgcolor=CARD, bordercolor=BORDER, font_color=INK),
+        legend=dict(orientation="h", x=0, y=1.02, yanchor="bottom", font=dict(color=INK)),
+        xaxis=dict(title=dict(text="Feature value", standoff=10), gridcolor=GRID, zeroline=False,
+                   tickfont=dict(color=MUTED), automargin=True),
+        yaxis=dict(showgrid=False, automargin=True, tickfont=dict(color=INK)),
+    )
+    return fig
+
+
 def recolor_lime(fig):
     """LIME draws green/red bars; recolour to the dashboard's fraud/legitimate colours."""
     for ax in fig.axes:
