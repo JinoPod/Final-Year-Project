@@ -408,7 +408,7 @@ def page_upload():
             "fraud_probability": st.column_config.ProgressColumn(
                 "Fraud score", min_value=0.0, max_value=1.0, format="percent"),
             "main_reasons": st.column_config.TextColumn(
-                "Main reasons (↑ raises risk, ↓ lowers risk)", width="large"),
+                "Main reasons (↑ raises risk, ↓ lowers risk)", width=fit_width(shown["main_reasons"])),
             "actual": st.column_config.NumberColumn("Actual (1 = fraud)"),
         },
     )
@@ -428,6 +428,16 @@ def page_upload():
                      batch.shap_values[i], batch.raw_features.iloc[i].to_numpy(dtype=float),
                      batch.raw_features.columns, batch.base_value,
                      actual=int(results["actual"].iat[i]) if "actual" in results.columns else None)
+
+
+def fit_width(texts, px_per_char=8, minimum=400, maximum=2400):
+    """Column width in pixels that shows the longest text in full.
+
+    Table cells cannot wrap, so a wide column plus the table's horizontal scrollbar is
+    the way to read long text without hovering over each cell.
+    """
+    longest = int(texts.astype(str).str.len().max()) if len(texts) else 0
+    return int(min(max(longest * px_per_char + 32, minimum), maximum))
 
 
 def page_audit():
@@ -479,7 +489,8 @@ def page_audit():
             "fraud_probability": st.column_config.ProgressColumn(
                 "Fraud score", min_value=0.0, max_value=1.0, format="percent"),
             "actual": st.column_config.NumberColumn("Actual (1 = fraud)"),
-            "top_factors": st.column_config.TextColumn("Main factors (as logged)", width="large"),
+            "top_factors": st.column_config.TextColumn(
+                "Main factors (as logged)", width=fit_width(decisions["top_factors"])),
         },
     )
     st.download_button("Download decision log (CSV)", decisions.to_csv(index=False).encode(),
