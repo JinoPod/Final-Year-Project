@@ -10,9 +10,15 @@ validator against the creme background:
     CRIMSON "towards fraud"                             (#BF4B3C)
 
 Gold is an accent for the interface only; it never encodes data.
+
+Branding: the dashboard is called CLARIX. Logo files are in dashboard/assets/clarix/.
 """
 
+import base64
+import functools
 import html
+import re
+from pathlib import Path
 
 import matplotlib as mpl
 import numpy as np
@@ -43,6 +49,9 @@ STATUS = {  # risk-level colours; always shown with an icon and a label
     "low": {"color": "#3E7D5A", "tint": "#E5F1E9"},
 }
 
+ASSETS = Path(__file__).resolve().parent / "assets" / "clarix"
+APP_ICON = ASSETS / "clarix-app-icon.png"  # browser-tab icon, rendered from clarix-app-icon.svg
+
 SHAP_CMAP = LinearSegmentedColormap.from_list("blue_crimson", [BLUE, "#D9D4CB", CRIMSON])
 
 CSS = f"""
@@ -71,8 +80,7 @@ h2, h3, h4 {{ color: {NAVY}; }}
 [data-testid="stSidebar"] {{ border-right: 3px solid {GOLD}; }}
 .sidebar-brand {{ padding: 0.2rem 0 0.9rem 0; border-bottom: 1px solid rgba(217, 180, 90, 0.45);
                   margin-bottom: 0.8rem; }}
-.sidebar-brand .name {{ color: {GOLD_LIGHT}; font-family: serif; font-size: 1.35rem; font-weight: 700; }}
-.sidebar-brand .tag {{ color: #C9D3E0; font-size: 0.8rem; margin-top: 0.15rem; }}
+.sidebar-brand img {{ width: 100%; display: block; }}
 .nav-label {{ color: #C9D3E0; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em;
               margin: 0.2rem 0 0.1rem 0.2rem; }}
 
@@ -107,6 +115,9 @@ h2, h3, h4 {{ color: {NAVY}; }}
          border-bottom: 4px solid {GOLD}; }}
 .hero h1 {{ color: {CREME}; border: none; margin: 0 0 0.4rem 0; padding: 0; font-family: serif; }}
 .hero p {{ color: #D8DEE8; margin: 0; font-size: 1.02rem; max-width: 52rem; }}
+.hero .kicker {{ color: {GOLD_LIGHT}; letter-spacing: 0.32em; font-size: 0.8rem; font-weight: 600;
+                 margin-bottom: 0.35rem; }}
+.hero .fyp {{ color: #AEB9C9; font-size: 0.82rem; margin-top: 0.9rem; }}
 .hero .accent {{ color: {GOLD_LIGHT}; font-weight: 600; }}
 
 /* Verdict card */
@@ -157,16 +168,37 @@ def apply_theme():
     )
 
 
+@functools.lru_cache(maxsize=None)
+def logo_uri(name="clarix-logo-navy.svg", crop=True):
+    """A logo file as a data URI for an <img> tag.
+
+    Drops the full-size background rectangle (so the logo sits on the sidebar's own navy),
+    trims the empty margin around the artwork, and leaves out the embedded C2PA metadata
+    block, which is most of the file size. The original files are not changed.
+    """
+    svg = (ASSETS / name).read_text(encoding="utf-8")
+    svg = re.sub(r"<metadata>.*?</metadata>", "", svg, flags=re.S)
+    svg = re.sub(r'<rect width="880" height="264" fill="[^"]+"/>', "", svg, count=1)
+    if crop:
+        svg = svg.replace('viewBox="0 0 880 264" width="880" height="264"',
+                          'viewBox="62 46 790 176" width="790" height="176"', 1)
+    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
+
+
 def sidebar_brand():
     st.sidebar.markdown(
-        '<div class="sidebar-brand"><div class="name">🛡️ Fraud Detection</div>'
-        '<div class="tag">Explainable AI · XGBoost + SHAP</div></div>',
+        f'<div class="sidebar-brand"><img src="{logo_uri()}" '
+        'alt="CLARIX: XAI fraud detection and transaction monitoring"></div>',
         unsafe_allow_html=True)
 
 
-def hero(title, subtitle_html):
-    st.markdown(f'<div class="hero"><h1>{html.escape(title)}</h1><p>{subtitle_html}</p></div>',
-                unsafe_allow_html=True)
+def hero(title, subtitle_html, kicker=None, footnote=None):
+    st.markdown(
+        '<div class="hero">'
+        + (f'<div class="kicker">{html.escape(kicker)}</div>' if kicker else "")
+        + f'<h1>{html.escape(title)}</h1><p>{subtitle_html}</p>'
+        + (f'<div class="fyp">{html.escape(footnote)}</div>' if footnote else "")
+        + '</div>', unsafe_allow_html=True)
 
 
 def verdict_card(v, probability, threshold, review_floor, score_text):

@@ -32,8 +32,8 @@ import theme  # noqa: E402  (dashboard/theme.py)
 
 # Set page config
 st.set_page_config(
-    page_title="Fraud Detection · XAI",
-    page_icon="🛡️",
+    page_title="CLARIX · XAI Fraud Detection",
+    page_icon=str(theme.APP_ICON),
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -674,7 +674,10 @@ def main():
             "Explainable Fraud Detection",
             "Scores credit card transactions with a tuned <span class='accent'>XGBoost</span> "
             "model and explains every decision with <span class='accent'>SHAP</span>, in plain "
-            "language an analyst can act on. Every decision is kept in a tamper-evident audit log.")
+            "language an analyst can act on. Every decision is kept in a tamper-evident audit log.",
+            kicker="CLARIX",
+            footnote="Final Year Project: XAI-Based Fraud Detection: An Interpretable Machine "
+                     "Learning Approach for Transaction Monitoring")
 
         cards = [
             ("📤", "Upload & Score", "Upload a CSV of transactions. Each one gets a risk level, "

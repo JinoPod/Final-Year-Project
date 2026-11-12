@@ -1,5 +1,10 @@
 # XAI-Based Fraud Detection
 
+<img src="dashboard/assets/clarix/clarix-logo-creme.svg" alt="CLARIX logo" width="440">
+
+Final Year Project: *XAI-Based Fraud Detection: An Interpretable Machine Learning Approach for
+Transaction Monitoring*. The dashboard is branded **CLARIX**.
+
 An interpretable machine-learning system for credit card transaction monitoring.
 A tuned XGBoost model (trained with SMOTE) flags fraudulent transactions, SHAP explains
 each decision, and a Streamlit dashboard lets an analyst upload transactions, see the
@@ -77,7 +82,9 @@ The audit log is stored in `logs/audit.db` (SQLite, append-only: records cannot 
 
 ```
 financial-fraud-detection/
-├── dashboard/app.py            # Streamlit dashboard
+├── dashboard/app.py            # Streamlit dashboard (CLARIX)
+├── dashboard/theme.py          # colours, CSS and themed charts
+├── dashboard/assets/clarix/    # CLARIX logo and icon files
 ├── data/
 │   ├── raw/                    # creditcard.csv (not in git)
 │   ├── processed/              # scaled train/test arrays + preprocessor.pkl
