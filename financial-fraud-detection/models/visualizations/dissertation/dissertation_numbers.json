@@ -1,0 +1,35 @@
+{
+  "confusion_matrix": {
+    "tn": 56648,
+    "fp": 3,
+    "fn": 23,
+    "tp": 72
+  },
+  "score_bands": {
+    "review_band": {
+      "n": 9,
+      "fraud": 2
+    },
+    "missed_fraud_scores": {
+      "n": 23,
+      "below_0.1": 19,
+      "below_0.5": 21
+    },
+    "legit_below_0.01": 0.9941219042911864
+  },
+  "lime_vs_shap": {
+    "n_cases": 30,
+    "k": 5,
+    "mean_overlap": 2.7666666666666666,
+    "share_at_least_3": 0.6666666666666666,
+    "share_same_top1": 0.36666666666666664,
+    "overlap_counts": {
+      "0": 0,
+      "1": 1,
+      "2": 9,
+      "3": 16,
+      "4": 4,
+      "5": 0
+    }
+  }
+}
