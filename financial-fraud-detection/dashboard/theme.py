@@ -80,7 +80,18 @@ h2, h3, h4 {{ color: {NAVY}; }}
 [data-testid="stSidebar"] {{ border-right: 3px solid {GOLD}; }}
 .sidebar-brand {{ padding: 0.2rem 0 0.9rem 0; border-bottom: 1px solid rgba(217, 180, 90, 0.45);
                   margin-bottom: 0.8rem; }}
-.sidebar-brand img {{ width: 100%; display: block; }}
+.sidebar-brand {{ text-align: center; }}
+.sidebar-brand img {{ width: 72%; display: inline-block; margin: 0.2rem 0 0.1rem 0; }}
+[data-testid="stSidebar"] .stButton button::before {{
+    content: ""; flex: none; width: 1.2rem; height: 1.2rem; margin-right: 0.65rem;
+    background-position: center; background-size: contain; background-repeat: no-repeat; }}
+
+/* Home page card headings with page icons */
+.card-title {{ display: flex; align-items: center; gap: 0.6rem; font-family: serif;
+               font-size: 1.2rem; font-weight: 700; color: {NAVY}; line-height: 1.25;
+               margin-bottom: 0.4rem; }}
+.card-title img {{ width: 2.1rem; height: 2.1rem; flex: none; padding: 0.35rem;
+                   background: {CREME_DARK}; border-radius: 10px; }}
 .nav-label {{ color: #C9D3E0; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em;
               margin: 0.2rem 0 0.1rem 0.2rem; }}
 
@@ -154,7 +165,7 @@ h2, h3, h4 {{ color: {NAVY}; }}
 
 def apply_theme():
     """Inject CSS and style matplotlib/SHAP charts to match the theme."""
-    st.markdown(CSS, unsafe_allow_html=True)
+    st.markdown(CSS + nav_icon_css(), unsafe_allow_html=True)
     mpl.rcParams.update({
         "figure.facecolor": CREME, "axes.facecolor": CREME, "savefig.facecolor": CREME,
         "text.color": INK, "axes.labelcolor": INK, "axes.edgecolor": BORDER,
@@ -178,7 +189,7 @@ def logo_uri(name="clarix-logo-navy.svg", crop=True):
     """
     svg = (ASSETS / name).read_text(encoding="utf-8")
     svg = re.sub(r"<metadata>.*?</metadata>", "", svg, flags=re.S)
-    svg = re.sub(r'<rect width="880" height="264" fill="[^"]+"/>', "", svg, count=1)
+    svg = re.sub(r'(<svg[^>]*>\s*)<rect width="\d+" height="\d+" fill="[^"]+"/>', r"\1", svg, count=1)
     if crop:
         svg = svg.replace('viewBox="0 0 880 264" width="880" height="264"',
                           'viewBox="62 46 790 176" width="790" height="176"', 1)
@@ -187,9 +198,60 @@ def logo_uri(name="clarix-logo-navy.svg", crop=True):
 
 def sidebar_brand():
     st.sidebar.markdown(
-        f'<div class="sidebar-brand"><img src="{logo_uri()}" '
-        'alt="CLARIX: XAI fraud detection and transaction monitoring"></div>',
-        unsafe_allow_html=True)
+        f'<div class="sidebar-brand"><img src="{logo_uri("clarix-logo-stacked-navy.svg", crop=False)}" '
+        'alt="CLARIX"></div>', unsafe_allow_html=True)
+
+
+# ---- Page icons --------------------------------------------------------------
+# Line icons on a 24-unit grid, drawn to match the CLARIX shield: round caps, one main
+# colour plus a gold accent, and the logo's pulse line in the chart and magnifier icons.
+# Each entry is (main strokes, accent strokes).
+ICON_PATHS = {
+    "home": ('<path d="M5 10.5V20h14v-9.5"/>',
+             '<path d="M3 12 12 4l9 8"/><path d="M10 20v-5h4v5"/>'),
+    "upload": ('<path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/>',
+               '<path d="M12 15V4"/><path d="M7.5 8.5 12 4l4.5 4.5"/>'),
+    "audit": ('<rect x="5.5" y="4.5" width="13" height="16.5" rx="1.5"/><path d="M9.5 3h5v3h-5z"/>'
+              '<path d="M9 10h6"/>',
+              '<path d="m9 15.5 2 2 4-4"/>'),
+    "performance": ('<path d="M4 4v16h16"/>',
+                    '<path d="m7.5 15 3-4 3 2.5 4.5-6.5"/><circle cx="18" cy="7" r="1.2"/>'),
+    "explain": ('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/>',
+                '<path d="M6.5 11h1.8l1.2-2.5 1.6 4.5 1.2-2h1.7"/>'),
+}
+PAGE_ICON_KEYS = {"Home": "home", "Upload & Score": "upload", "Audit Log": "audit",
+                  "Model Performance": "performance", "Transaction Explanation": "explain"}
+
+
+@functools.lru_cache(maxsize=None)
+def icon_uri(name, main=NAVY, accent=GOLD):
+    main_paths, accent_paths = ICON_PATHS[name]
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" '
+           'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+           f'<g stroke="{main}">{main_paths}</g><g stroke="{accent}">{accent_paths}</g></svg>')
+    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
+
+
+def nav_key(page):
+    return "nav_" + PAGE_ICON_KEYS[page]
+
+
+@functools.lru_cache(maxsize=None)
+def nav_icon_css():
+    """Sidebar icons: creme with a gold accent; gold with a creme accent on the current page."""
+    rules = []
+    for page, name in PAGE_ICON_KEYS.items():
+        sel = f".st-key-{nav_key(page)} button"
+        rules.append(f'{sel}::before {{ background-image: url("{icon_uri(name, "#F5EFE3", GOLD_LIGHT)}"); }}')
+        rules.append(f'{sel}[kind="primary"]::before '
+                     f'{{ background-image: url("{icon_uri(name, GOLD_LIGHT, "#F5EFE3")}"); }}')
+    return "<style>" + "\n".join(rules) + "</style>"
+
+
+def card_title(page):
+    """Home-page card heading with its page icon."""
+    return (f'<div class="card-title"><img src="{icon_uri(PAGE_ICON_KEYS[page])}" alt="">'
+            f'<span>{html.escape(page)}</span></div>')
 
 
 def hero(title, subtitle_html, kicker=None, footnote=None):

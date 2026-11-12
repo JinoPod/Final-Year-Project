@@ -127,7 +127,7 @@ HOW_TO_READ = {
 
 
 def how_to_read(key):
-    with st.expander("ℹ️ How to read this chart"):
+    with st.expander("How to read this chart", icon=":material/info:"):
         st.markdown(HOW_TO_READ[key])
 
 
@@ -170,7 +170,7 @@ def show_explanation(probability, threshold, shap_row, values, feature_names, ba
     v = verdict(probability, threshold)
     theme.verdict_card(v, probability, threshold, REVIEW_FLOOR, fmt_prob(probability))
     if v["borderline"]:
-        st.info(f"⚠️ {v['borderline_note']}")
+        st.info(v["borderline_note"], icon=":material/warning:")
     if actual is not None:
         st.caption(f"Actual label in the data: **{'fraud' if actual == 1 else 'legitimate'}**.")
 
@@ -179,7 +179,7 @@ def show_explanation(probability, threshold, shap_row, values, feature_names, ba
     st.markdown(summary_sentence(reason_list, probability, threshold))
     col1, col2 = st.columns([3, 2])
     with col1:
-        st.markdown("\n".join(f"{'🔺' if r['raises_risk'] else '🔻'} {r['sentence']}\n"
+        st.markdown("\n".join(f"{RAISES if r['raises_risk'] else LOWERS} {r['sentence']}\n"
                               for r in reason_list))
     with col2:
         plot_reasons(reason_list)
@@ -389,7 +389,7 @@ def page_upload():
     c3.metric("🟡 Needs review", f"{int((keys == 'review').sum()):,}")
     c4.metric("🟢 Low risk", f"{int((keys == 'low').sum()):,}")
     c5.metric("Not scored", f"{len(prepared.rejected):,}")
-    with st.expander("ℹ️ What do the risk levels mean?"):
+    with st.expander("What do the risk levels mean?", icon=":material/info:"):
         st.markdown(risk_level_table(batch.threshold))
 
     if len(prepared.rejected):
@@ -494,8 +494,8 @@ def batch_cards(summaries, selected):
             viewing = selected == bid
             with col.container(border=True, key="batch_card_sel" if viewing else f"batch_card_{bid}"):
                 st.markdown(f"**Batch #{bid}**" + ("  ·  *viewing*" if viewing else ""))
-                st.markdown(f"📄 `{b['source_file']}`")
-                st.caption(f"🕒 {fmt_time(b['created_at'])}")
+                st.markdown(f":material/description: `{b['source_file']}`")
+                st.caption(f":material/schedule: {fmt_time(b['created_at'])}")
                 not_scored = f" ({int(b['rejected_rows'])} not scored)" if b["rejected_rows"] else ""
                 st.markdown(
                     f"🔴 **{int(b['high'])}** high &nbsp; 🟡 **{int(b['review'])}** review &nbsp; "
@@ -519,7 +519,7 @@ def batch_cards(summaries, selected):
 
 def fresh_log_section():
     st.divider()
-    with st.expander("🗃️ Start a fresh log"):
+    with st.expander("Start a fresh log", icon=":material/inventory_2:"):
         st.markdown(
             "Moves the whole current log to `logs/archive/` and starts a new, empty one. "
             "**Nothing is deleted**: the archived file keeps every decision and its explanation, "
@@ -579,7 +579,8 @@ def page_audit():
     else:
         b = summaries[summaries["id"] == selected].iloc[0]
         st.subheader(f"Decisions in batch #{selected}")
-        st.caption(f"📄 {b['source_file']}  ·  🕒 {fmt_time(b['created_at'])}  ·  "
+        st.caption(f":material/description: {b['source_file']}  ·  :material/schedule: "
+                   f"{fmt_time(b['created_at'])}  ·  "
                    f"alert threshold {b['threshold']:.4f}")
     show = st.selectbox("Show", ["High risk and Needs review", "High risk only", "All decisions"])
     decisions = log.get_decisions(batch_id=None if selected == ALL_BATCHES else selected,
@@ -629,7 +630,7 @@ def page_audit():
         f"{d['threshold']:.4f}"
     )
     if d["hash_ok"]:
-        st.caption(f"✅ Integrity check passed: the stored inputs match their SHA-256 fingerprint "
+        st.caption(f":green[:material/verified:] Integrity check passed: the stored inputs match their SHA-256 fingerprint "
                    f"({d['input_sha256'][:16]}…), so this record has not been altered.")
     else:
         st.error("Integrity check FAILED: the stored inputs do not match their fingerprint. "
@@ -639,8 +640,11 @@ def page_audit():
     fresh_log_section()
 
 
-PAGE_ICONS = {"Home": "🏠", "Upload & Score": "📤", "Audit Log": "🗂️",
-              "Model Performance": "📊", "Transaction Explanation": "🔍"}
+PAGES = list(theme.PAGE_ICON_KEYS)  # Home, Upload & Score, Audit Log, ...
+
+# Direction markers for the reasons list, in the chart colours (crimson / blue).
+RAISES = ":red[:material/arrow_upward:]"
+LOWERS = ":blue[:material/arrow_downward:]"
 
 
 def go_to(page):
@@ -656,12 +660,12 @@ def main():
     theme.sidebar_brand()
     if "page" not in st.session_state:  # ?page=Audit Log opens that page directly
         requested = st.query_params.get("page", "Home")
-        st.session_state.page = requested if requested in PAGE_ICONS else "Home"
+        st.session_state.page = requested if requested in PAGES else "Home"
     page = st.session_state.page
 
     st.sidebar.markdown('<div class="nav-label">Navigation</div>', unsafe_allow_html=True)
-    for p, icon in PAGE_ICONS.items():
-        st.sidebar.button(f"{icon}  {p}", key=f"nav_{p}", on_click=go_to, args=(p,),
+    for p in PAGES:
+        st.sidebar.button(p, key=theme.nav_key(p), on_click=go_to, args=(p,),
                           type="primary" if p == page else "secondary", width="stretch")
     threshold = float(load_model()["metadata"]["threshold"])
     st.sidebar.markdown("---")
@@ -680,19 +684,19 @@ def main():
                      "Learning Approach for Transaction Monitoring")
 
         cards = [
-            ("📤", "Upload & Score", "Upload a CSV of transactions. Each one gets a risk level, "
+            ("Upload & Score", "Upload a CSV of transactions. Each one gets a risk level, "
                                     "a suggested action and the reasons behind it."),
-            ("🗂️", "Audit Log", "Review any past decision with the explanation stored at the time, "
+            ("Audit Log", "Review any past decision with the explanation stored at the time, "
                                "and confirm the record has not been altered."),
-            ("📊", "Model Performance", "How well the model does on 56,746 transactions it never "
+            ("Model Performance", "How well the model does on 56,746 transactions it never "
                                        "saw during training, in plain terms."),
-            ("🔍", "Transaction Explanation", "Explore caught frauds, false alarms and missed frauds "
+            ("Transaction Explanation", "Explore caught frauds, false alarms and missed frauds "
                                              "from the test set and see why each happened."),
         ]
         cols = st.container(key="home_cards").columns(4)
-        for col, (icon, title, text) in zip(cols, cards):
+        for col, (title, text) in zip(cols, cards):
             with col.container(border=True, height="stretch"):
-                st.markdown(f"##### {icon} {title}")
+                st.markdown(theme.card_title(title), unsafe_allow_html=True)
                 st.caption(text)
                 st.button("Open →", key=f"card_{title}", on_click=go_to, args=(title,))
 
@@ -746,20 +750,20 @@ def main():
         review = (y_pred_proba >= REVIEW_FLOOR) & (y_pred == 0)
         review_fraud = int((review & (y == 1)).sum())
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("✅ Alerts that are real fraud", f"{tp / (tp + fp) * 100:.0f} in 100",
+        c1.metric(":material/verified: Alerts that are real fraud", f"{tp / (tp + fp) * 100:.0f} in 100",
                   f"{tp} of {tp + fp} alerts", delta_color="off", delta_arrow="off")
-        c2.metric("🎯 Frauds caught", f"about {round(tp / n_fraud * 4)} in 4",
+        c2.metric(":material/target: Frauds caught", f"about {round(tp / n_fraud * 4)} in 4",
                   f"{tp} of {n_fraud} ({tp / n_fraud:.0%})", delta_color="off", delta_arrow="off")
-        c3.metric("🔕 False alarm rate", f"1 in {round(n_legit / max(fp, 1), -3):,.0f}",
+        c3.metric(":material/notifications_off: False alarm rate", f"1 in {round(n_legit / max(fp, 1), -3):,.0f}",
                   f"{fp} of {n_legit:,} legitimate", delta_color="off", delta_arrow="off")
-        c4.metric("🟡 Sent for review", f"{int(review.sum())}",
+        c4.metric(":material/hourglass_top: Sent for review", f"{int(review.sum())}",
                   f"{review_fraud} of them fraud", delta_color="off", delta_arrow="off")
-        st.caption(f"⚠️ Weak point: about {round(fn / n_fraud * 4)} in 4 frauds look like normal "
+        st.caption(f":material/warning: Weak point: about {round(fn / n_fraud * 4)} in 4 frauds look like normal "
                    "transactions to the model and are missed.")
 
         st.subheader("Performance Metrics")
         show_metrics(y_test, y_pred, y_pred_proba)
-        with st.expander("ℹ️ What do these metrics mean?"):
+        with st.expander("What do these metrics mean?", icon=":material/info:"):
             st.markdown(
                 "- **Precision**: of the transactions flagged, the share that really were fraud. "
                 "High precision means few false alarms.\n"

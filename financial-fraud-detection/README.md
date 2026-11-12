@@ -84,7 +84,7 @@ The audit log is stored in `logs/audit.db` (SQLite, append-only: records cannot 
 financial-fraud-detection/
 ├── dashboard/app.py            # Streamlit dashboard (CLARIX)
 ├── dashboard/theme.py          # colours, CSS and themed charts
-├── dashboard/assets/clarix/    # CLARIX logo and icon files
+├── dashboard/assets/clarix/    # CLARIX logos (incl. stacked, built by make_stacked_logo.py) and icons
 ├── data/
 │   ├── raw/                    # creditcard.csv (not in git)
 │   ├── processed/              # scaled train/test arrays + preprocessor.pkl
