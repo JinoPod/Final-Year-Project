@@ -240,7 +240,16 @@ A chart shows the 12 most influential V features, each as a normal-range band wi
 | V4 | 2 | −2.20 to 2.53 | 4.03 | High values point to fraud |
 | V8 | 4 | −0.84 to 1.04 | 0.60 | No simple high/low pattern |
 
-- **Point for the discussion.** Some features separate fraud strongly in the raw data, yet the model barely uses them: V16 (rank 28) has a typical fraud value of −3.55 against a normal range of −1.48 to 1.33, and V7 (rank 29) has −2.94 against −1.42 to 1.41. A likely reason is that they carry information the model already gets from V14, V12 and V10, so tree splits favour those. The data alone doesn't confirm this. It shows that SHAP importance means *how much this model relies on a feature*, not *how different frauds look on it*. Distinguishing the two is a useful XAI point.
+- **Point for the discussion.** Some features separate fraud strongly in the raw data, yet the model barely uses them: V16 (rank 28) has a typical fraud value of −3.55 against a normal range of −1.48 to 1.33, and V7 (rank 29) has −2.94 against −1.42 to 1.41. The reason, checked on the data: PCA components are uncorrelated across the dataset as a whole, but frauds are only 0.17% of it, and among the frauds the features move together. Pearson correlations, using the full deduplicated dataset (473 frauds), not the training split alone:
+
+| | V14 | V12 | V10 | V17 |
+|---|---|---|---|---|
+| V16, all transactions | −0.01 | −0.01 | 0.00 | −0.01 |
+| V16, frauds only | 0.65 | 0.88 | 0.82 | 0.96 |
+| V7, all transactions | 0.00 | −0.01 | −0.01 | −0.01 |
+| V7, frauds only | 0.35 | 0.66 | 0.87 | 0.73 |
+
+So V16 and V7 carry largely the same fraud signal as V17, V12 and V10. Once the trees have split on those, V16 and V7 add little. This is why they rank low in SHAP importance even though frauds look very different on them. It shows that SHAP importance means *how much this model relies on a feature*, not *how different frauds look on it*. Distinguishing the two is a useful XAI point.
 - **For future work.** With a dataset that has named features (e.g. IEEE-CIS), the same guide would describe real factors such as device or transaction type, giving explanations business meaning as well as faithfulness.
 
 **Suggested evaluation for the report.** Ask 3–5 people (ideally non-technical) to explain why a transaction was flagged:
