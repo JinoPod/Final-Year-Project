@@ -34,7 +34,7 @@ from src.models import dissertation_figures as df  # noqa: E402
 from src.models.report_figures import pick_cases, unscale  # noqa: E402
 
 OUT_DIR = os.path.join(PROJECT_DIR, "models", "visualizations", "paper")
-DPI = 300
+DPI = 600  # stays above 300 dpi when enlarged in the one-column paper
 COL_W = 3.4  # inches, one IEEE column
 
 plt.rcParams.update({"font.size": 8, "axes.titlesize": 8.5, "axes.labelsize": 8,
