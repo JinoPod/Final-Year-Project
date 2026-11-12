@@ -11,13 +11,16 @@ Every scored transaction is written to an SQLite database with:
     logged input is the one that was scored.
 
 The log is append-only: database triggers reject UPDATE and DELETE on the
-decision and batch tables.
+decision and batch tables. Nothing is ever deleted: start_fresh_log() moves the
+whole database file into logs/archive/ (kept intact) and a new, empty log begins.
 """
 
 import hashlib
 import json
 import os
+import shutil
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 import numpy as np
@@ -83,10 +86,17 @@ class AuditLog:
             for trigger in APPEND_ONLY_TRIGGERS:
                 conn.execute(trigger)
 
+    @contextmanager
     def _connect(self):
+        """Commit on success, roll back on error, and always close the file handle
+        (Windows cannot move a database file that still has an open connection)."""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     # ---- writing --------------------------------------------------------
 
@@ -134,6 +144,26 @@ class AuditLog:
         with self._connect() as conn:
             return pd.read_sql_query("SELECT * FROM batches ORDER BY id DESC", conn)
 
+    def batch_summaries(self, review_floor):
+        """One row per batch (newest first) with its counts per risk level."""
+        query = """SELECT b.id, b.created_at, b.source_file, b.file_sha256, b.threshold,
+                          b.total_rows, b.scored_rows, b.rejected_rows,
+                          COALESCE(SUM(d.fraud_probability >= b.threshold), 0) AS high,
+                          COALESCE(SUM(d.fraud_probability >= ? AND d.fraud_probability < b.threshold), 0)
+                              AS review
+                   FROM batches b LEFT JOIN decisions d ON d.batch_id = b.id
+                   GROUP BY b.id ORDER BY b.id DESC"""
+        with self._connect() as conn:
+            return pd.read_sql_query(query, conn, params=[float(review_floor)])
+
+    def find_file(self, file_bytes):
+        """Earlier batches made from exactly this file (matched by SHA-256), newest first."""
+        digest = hashlib.sha256(file_bytes).hexdigest()
+        with self._connect() as conn:
+            return pd.read_sql_query(
+                "SELECT id, created_at, source_file FROM batches WHERE file_sha256 = ? ORDER BY id DESC",
+                conn, params=[digest])
+
     def get_decisions(self, batch_id=None, flagged_only=False, limit=None):
         """Decision log as a DataFrame (without the bulky JSON columns)."""
         query = """SELECT d.id, d.batch_id, b.created_at, b.source_file, d.row_number,
@@ -173,3 +203,26 @@ class AuditLog:
         d["flagged"] = bool(d["flagged"])
         d["hash_ok"] = hash_values(d["features"]) == d["input_sha256"]
         return d
+
+
+def start_fresh_log(db_path, archive_dir=None):
+    """Move the current log into an archive folder and leave no file behind, so the next
+    AuditLog(db_path) starts empty. Nothing is deleted. Returns the archive path, or None
+    if there was no log to archive."""
+    if not os.path.exists(db_path):
+        return None
+    archive_dir = archive_dir or os.path.join(os.path.dirname(os.path.abspath(db_path)), "archive")
+    os.makedirs(archive_dir, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
+    stem, ext = os.path.splitext(os.path.basename(db_path))
+    target = os.path.join(archive_dir, f"{stem}_{stamp}{ext}")
+    shutil.move(db_path, target)
+    return target
+
+
+def list_archives(db_path, archive_dir=None):
+    """Archived log files, newest first."""
+    archive_dir = archive_dir or os.path.join(os.path.dirname(os.path.abspath(db_path)), "archive")
+    if not os.path.isdir(archive_dir):
+        return []
+    return sorted((f for f in os.listdir(archive_dir) if f.endswith(".db")), reverse=True)

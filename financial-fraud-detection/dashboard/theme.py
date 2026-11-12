@@ -97,6 +97,10 @@ h2, h3, h4 {{ color: {NAVY}; }}
 .st-key-home_cards .stButton button {{ background: {NAVY}; color: {CREME}; border: none; }}
 .st-key-home_cards .stButton button:hover {{ background: {NAVY_DARK}; color: {GOLD_LIGHT}; }}
 
+/* Audit Log: the batch card being viewed */
+.st-key-batch_card_sel {{ border: 2px solid {GOLD} !important; background: {CARD};
+                          box-shadow: 0 2px 6px rgba(184, 137, 43, 0.18); }}
+
 /* Home hero banner */
 .hero {{ background: linear-gradient(135deg, {NAVY} 0%, {NAVY_DARK} 100%); color: {CREME};
          border-radius: 14px; padding: 1.8rem 2rem; margin-bottom: 1.4rem;

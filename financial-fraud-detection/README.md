@@ -58,7 +58,7 @@ Then open http://localhost:8501. Pages:
 
 - **Home**: project overview
 - **Upload & Score**: upload a CSV, get fraud scores and a SHAP explanation per row; each upload is written to the audit log
-- **Audit Log**: browse past batches and decisions; stored input hashes are re-checked to detect tampering
+- **Audit Log**: one card per upload (newest shown first); browse its decisions; stored input hashes are re-checked to detect tampering. Re-uploading a file that was already scored asks before logging it again
 - **Model Performance**: XGBoost test-set metrics, confusion matrix, ROC/PR curves and global SHAP charts
 - **Transaction Explanation**: SHAP (and LIME) explanation for any test transaction
 
@@ -71,7 +71,7 @@ value with normal training transactions using `models/models/feature_reference.j
 rebuilt automatically if missing (delete it after retraining).
 
 Try the upload page with `data/sample/sample_transactions.csv` (1,000 test transactions, 30 fraud).
-The audit log is stored in `logs/audit.db` (SQLite, append-only).
+The audit log is stored in `logs/audit.db` (SQLite, append-only: records cannot be edited or deleted). "Start a fresh log" on the Audit Log page moves the whole file to `logs/archive/audit_<UTC time>.db` and starts an empty log; nothing is deleted. Batch numbers restart at #1 in each new log.
 
 ## Project structure
 

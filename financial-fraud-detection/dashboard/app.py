@@ -22,7 +22,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.data.preprocess import preprocess_data
 from src.models.report_figures import unscale
 from src.inference import FraudScorer, prepare_upload, MAX_ROWS, PRIMARY_MODEL
-from src.audit_log import AuditLog
+from src.audit_log import AuditLog, list_archives, start_fresh_log
 from src.explanations import (
     load_reference, verdict, reasons, short_reasons, summary_sentence, risk_key, risk_label,
     global_takeaways, fmt_prob, REVIEW_FLOOR, RISK_LEVELS
@@ -346,6 +346,20 @@ def page_upload():
     file_key = hashlib.sha256(file_bytes).hexdigest()
     cache = st.session_state.setdefault("scored_uploads", {})
     if file_key not in cache:
+        earlier = get_audit_log().find_file(file_bytes)
+        if len(earlier) and st.session_state.get("rescore_ok") != file_key:
+            last = earlier.iloc[0]
+            times = f" (and {len(earlier) - 1} time{'s' if len(earlier) > 2 else ''} before that)" \
+                if len(earlier) > 1 else ""
+            st.warning(f"This file was already scored as **batch #{last['id']}** on "
+                       f"{fmt_time(last['created_at'])}{times}. Scoring it again would add a "
+                       "duplicate batch to the audit log.")
+            c1, c2, _ = st.columns([1, 1, 1])
+            c1.button(f"View batch #{last['id']} in the Audit Log", type="primary",
+                      on_click=view_batch, args=(int(last["id"]),), width="stretch")
+            c2.button("Score it again as a new batch", width="stretch",
+                      on_click=st.session_state.__setitem__, args=("rescore_ok", file_key))
+            return
         with st.spinner(f"Scoring {len(prepared.features):,} transactions..."):
             batch = scorer.score(prepared)
             batch_id = get_audit_log().log_batch(
@@ -361,11 +375,14 @@ def page_upload():
                 for i in range(len(batch.results))
             ]
         cache[file_key] = (batch, batch_id)
+        st.session_state.audit_batch = batch_id  # the Audit Log opens on this upload
     batch, batch_id = cache[file_key]
     results = batch.results
     keys = np.array([risk_key(p, batch.threshold) for p in results["fraud_probability"]])
 
-    st.success(f"Scored and saved to the audit log as batch #{batch_id}.")
+    c1, c2 = st.columns([3, 1], vertical_alignment="center")
+    c1.success(f"Scored and saved to the audit log as batch #{batch_id}.")
+    c2.button("View in Audit Log", on_click=view_batch, args=(batch_id,), width="stretch")
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Transactions scored", f"{len(results):,}")
     c2.metric("🔴 High risk", f"{int((keys == 'high').sum()):,}")
@@ -440,34 +457,133 @@ def fit_width(texts, px_per_char=8, minimum=400, maximum=2400):
     return int(min(max(longest * px_per_char + 32, minimum), maximum))
 
 
+def fmt_time(iso):
+    """'2026-11-11T13:50:53+00:00' -> '11 Nov 2026, 13:50 UTC'."""
+    try:
+        return pd.Timestamp(iso).strftime("%d %b %Y, %H:%M UTC")
+    except (ValueError, TypeError):
+        return str(iso)
+
+
+def view_batch(batch_id):
+    """Button callback: open the Audit Log on one batch."""
+    st.session_state.audit_batch = batch_id
+    go_to("Audit Log")
+
+
+def fresh_log():
+    """Button callback: archive the current log and start an empty one."""
+    archived = start_fresh_log(AUDIT_DB_PATH)
+    get_audit_log.clear()  # the next call creates a new, empty database
+    for key in ("scored_uploads", "audit_batch", "rescore_ok", "fresh_ok", "older_pick"):
+        st.session_state.pop(key, None)
+    st.session_state.fresh_msg = archived
+
+
+ALL_BATCHES = "all"
+CARDS_SHOWN = 6  # newest uploads shown as cards; older ones are in a dropdown
+
+
+def batch_cards(summaries, selected):
+    """One card per upload, newest first; the batch being viewed is highlighted."""
+    recent = summaries.head(CARDS_SHOWN)
+    for start in range(0, len(recent), 3):
+        cols = st.columns(3)
+        for col, (_, b) in zip(cols, recent.iloc[start:start + 3].iterrows()):
+            bid = int(b["id"])
+            viewing = selected == bid
+            with col.container(border=True, key="batch_card_sel" if viewing else f"batch_card_{bid}"):
+                st.markdown(f"**Batch #{bid}**" + ("  ·  *viewing*" if viewing else ""))
+                st.markdown(f"📄 `{b['source_file']}`")
+                st.caption(f"🕒 {fmt_time(b['created_at'])}")
+                not_scored = f" ({int(b['rejected_rows'])} not scored)" if b["rejected_rows"] else ""
+                st.markdown(
+                    f"🔴 **{int(b['high'])}** high &nbsp; 🟡 **{int(b['review'])}** review &nbsp; "
+                    f"of {int(b['scored_rows']):,} scored{not_scored}")
+                st.button("Viewing" if viewing else "View", key=f"view_{bid}", disabled=viewing,
+                          type="primary" if viewing else "secondary", width="stretch",
+                          on_click=st.session_state.__setitem__, args=("audit_batch", bid))
+
+    older = summaries.iloc[CARDS_SHOWN:]
+    c1, c2 = st.columns([2, 1], vertical_alignment="bottom")
+    if len(older):
+        labels = {int(i): f"#{int(i)}  ·  {f}  ·  {fmt_time(t)}"
+                  for i, f, t in zip(older["id"], older["source_file"], older["created_at"])}
+        c1.selectbox(f"Older uploads ({len(older)})", list(labels), index=None,
+                     placeholder="Choose an older batch", format_func=labels.get, key="older_pick",
+                     on_change=lambda: st.session_state.update(audit_batch=st.session_state.older_pick))
+    if len(summaries) > 1:
+        c2.button("Show all batches together", disabled=selected == ALL_BATCHES, width="stretch",
+                  on_click=st.session_state.__setitem__, args=("audit_batch", ALL_BATCHES))
+
+
+def fresh_log_section():
+    st.divider()
+    with st.expander("🗃️ Start a fresh log"):
+        st.markdown(
+            "Moves the whole current log to `logs/archive/` and starts a new, empty one. "
+            "**Nothing is deleted**: the archived file keeps every decision and its explanation, "
+            "and can be inspected at any time. Useful for clearing test uploads before a "
+            "demonstration.")
+        archives = list_archives(AUDIT_DB_PATH)
+        if archives:
+            st.caption("Already archived: " + ", ".join(f"`{a}`" for a in archives))
+        ok = st.checkbox("I understand that the current log will be moved to the archive",
+                         key="fresh_ok")
+        st.button("Start a fresh log", disabled=not ok, on_click=fresh_log)
+
+
 def page_audit():
     """Audit Log page (report Section 3.6.5)."""
     st.title("Audit Log")
     st.write(
         "Every decision made on the Upload & Score page, with the explanation stored at the time. "
-        "Explanations here are read from the log; the model is not re-run. The log is append-only."
+        "Explanations here are read from the log; the model is not re-run. The log is append-only: "
+        "records cannot be edited or deleted."
     )
+    if st.session_state.get("fresh_msg"):
+        archived = st.session_state.pop("fresh_msg")
+        st.success("Started a fresh log. The previous one was archived as "
+                   f"`{os.path.relpath(archived, PROJECT_DIR)}`.")
     log = get_audit_log()
-    batches = log.list_batches()
-    if batches.empty:
+    summaries = log.batch_summaries(REVIEW_FLOOR)
+    if summaries.empty:
         st.info("No decisions logged yet. Score a file on the Upload & Score page first.")
+        archives = list_archives(AUDIT_DB_PATH)
+        if archives:
+            st.caption("Archived logs in `logs/archive/`: " + ", ".join(f"`{a}`" for a in archives))
         return
 
-    st.subheader("Batches")
-    st.dataframe(
-        batches[["id", "created_at", "source_file", "model_name", "model_version", "threshold",
-                 "total_rows", "scored_rows", "rejected_rows", "flagged_rows"]],
-        hide_index=True, width="stretch",
-        column_config={"created_at": "Logged at (UTC)", "id": "Batch"},
-    )
+    ids = summaries["id"].astype(int).tolist()
+    selected = st.session_state.get("audit_batch")
+    if selected != ALL_BATCHES and selected not in ids:
+        selected = ids[0]  # default: the newest upload
+    st.session_state.audit_batch = selected
 
-    st.subheader("Decisions")
-    c1, c2 = st.columns([2, 1])
-    batch_choice = c1.selectbox(
-        "Batch", ["All batches"] + [f"#{b} — {f}" for b, f in zip(batches["id"], batches["source_file"])])
-    show = c2.selectbox("Show", ["High risk and Needs review", "High risk only", "All decisions"])
-    batch_id = None if batch_choice == "All batches" else int(batch_choice.split()[0][1:])
-    decisions = log.get_decisions(batch_id=batch_id, limit=20_000)
+    st.subheader("Uploads")
+    st.caption("Each uploaded file is saved as its own batch. Choose one to see its decisions.")
+    batch_cards(summaries, selected)
+
+    with st.expander("Batch details (technical)"):
+        st.dataframe(
+            log.list_batches()[["id", "created_at", "source_file", "file_sha256", "model_name",
+                                "model_version", "threshold", "total_rows", "scored_rows",
+                                "rejected_rows", "flagged_rows"]],
+            hide_index=True, width="stretch",
+            column_config={"created_at": "Logged at (UTC)", "id": "Batch",
+                           "file_sha256": "File fingerprint (SHA-256)"},
+        )
+
+    if selected == ALL_BATCHES:
+        st.subheader("Decisions from all batches")
+    else:
+        b = summaries[summaries["id"] == selected].iloc[0]
+        st.subheader(f"Decisions in batch #{selected}")
+        st.caption(f"📄 {b['source_file']}  ·  🕒 {fmt_time(b['created_at'])}  ·  "
+                   f"alert threshold {b['threshold']:.4f}")
+    show = st.selectbox("Show", ["High risk and Needs review", "High risk only", "All decisions"])
+    decisions = log.get_decisions(batch_id=None if selected == ALL_BATCHES else selected,
+                                  limit=20_000)
     keys = np.array([risk_key(p, t) for p, t in zip(decisions["fraud_probability"],
                                                     decisions["threshold"])])
     decisions["risk_level"] = [risk_label(p, t) for p, t in zip(decisions["fraud_probability"],
@@ -478,10 +594,13 @@ def page_audit():
         decisions = decisions[keys != "low"]
     if decisions.empty:
         st.info("No decisions match this filter.")
+        fresh_log_section()
         return
+    columns = ["id", "row_number", "risk_level", "fraud_probability", "actual", "top_factors"]
+    if selected == ALL_BATCHES:  # the batch columns only matter when batches are mixed
+        columns[1:1] = ["batch_id", "created_at", "source_file"]
     st.dataframe(
-        decisions[["id", "batch_id", "created_at", "source_file", "row_number", "risk_level",
-                   "fraud_probability", "actual", "top_factors"]],
+        decisions[columns],
         hide_index=True, width="stretch",
         column_config={
             "id": "Decision", "batch_id": "Batch", "created_at": "Logged at (UTC)",
@@ -493,8 +612,9 @@ def page_audit():
                 "Main factors (as logged)", width=fit_width(decisions["top_factors"])),
         },
     )
-    st.download_button("Download decision log (CSV)", decisions.to_csv(index=False).encode(),
-                       file_name="decision_log.csv", mime="text/csv")
+    name = "all_batches" if selected == ALL_BATCHES else f"batch_{selected}"
+    st.download_button("Download these decisions (CSV)", decisions.to_csv(index=False).encode(),
+                       file_name=f"decision_log_{name}.csv", mime="text/csv")
 
     st.subheader("Review a decision")
     labels = dict(zip(decisions["id"], decisions["risk_level"] + "  ·  score " +
@@ -516,6 +636,7 @@ def page_audit():
                  "This record may have been altered.")
     show_explanation(d["fraud_probability"], d["threshold"], d["shap_values"], d["features"],
                      d["feature_names"], d["base_value"], actual=d["actual"])
+    fresh_log_section()
 
 
 PAGE_ICONS = {"Home": "🏠", "Upload & Score": "📤", "Audit Log": "🗂️",
